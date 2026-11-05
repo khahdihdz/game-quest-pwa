@@ -1,8 +1,8 @@
 {
   "id": "./",
-  "name": "Questbound: Echoes of the Wild",
+  "name": "Questbound: Settlement Manager",
   "short_name": "Questbound",
-  "description": "Khám phá, sinh tồn, chế tạo và chiến đấu.",
+  "description": "Xây dựng, quản lý kinh tế và phát triển thị trấn fantasy.",
   "lang": "vi",
   "start_url": "./",
   "scope": "./",
@@ -10,16 +10,6 @@
   "orientation": "any",
   "background_color": "#0b151b",
   "theme_color": "#10201e",
-  "categories": [
-    "games",
-    "entertainment"
-  ],
-  "icons": [
-    {
-      "src": "./assets/icon.svg",
-      "sizes": "any",
-      "type": "image/svg+xml",
-      "purpose": "any"
-    }
-  ]
+  "categories": ["games", "simulation", "strategy"],
+  "icons": [{"src":"./assets/icon.svg","sizes":"any","type":"image/svg+xml","purpose":"any"}]
 }
