@@ -1,7 +1,7 @@
 {
-  "name": "Hotel Empire: Underworld",
-  "short_name": "Hotel Underworld",
-  "description": "Mô phỏng điều hành khách sạn noir với các lựa chọn cốt truyện hư cấu.",
+  "name": "Đế Chế Khách Sạn: Thế Giới Ngầm",
+  "short_name": "Đế Chế Khách Sạn",
+  "description": "Trò chơi mô phỏng điều hành khách sạn trong thế giới trinh thám u tối với các lựa chọn cốt truyện hư cấu.",
   "start_url": "./",
   "scope": "./",
   "display": "standalone",
