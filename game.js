@@ -50,7 +50,7 @@ const events = [
 const freshState = () => ({
 version:1,hotelName:'The First Stay',location:'Đà Nẵng · Việt Nam',day:1,minute:480,paused:false,speed:1,
 cash:120000,debt:30000,reputation:65,stars:2,experience:0,level:1,
-rooms:{standard:12,deluxe:6,suite:2,family:0},occupied:0,bookings:[],guests:[],nextGuestId:1,
+rooms:{standard:12,deluxe:6,suite:2,family:0},branches:1,branchNames:['The First Stay'],occupied:0,bookings:[],guests:[],nextGuestId:1,nextBookingId:1, 
 prices:{standard:75,deluxe:125,suite:220,family:175},staff:{reception:3,housekeeping:5,kitchen:2,maintenance:1,manager:1},
 morale:78,service:68,cleanliness:86,condition:92,energy:85,stock:100,
 facilities:{restaurant:true,spa:false,conference:false,pool:false,airport:false},
@@ -101,7 +101,11 @@ function guestDemand(){
  const marketing=state.marketingUntil>=state.day?1+state.marketing:1;
  const loyalty=1+state.bonuses.loyalty;
  const capacity=totalRooms();
- return Math.max(0,Math.round((capacity*.11+2)*season*rep*starsFactor*marketing*loyalty));
+ const averageRate=roomRevenue()/Math.max(1,capacity);
+ const averageBase=Object.values(roomTypes).reduce((a,r)=>a+r.base,0)/Object.keys(roomTypes).length;
+ const priceFactor=clamp(1.12-(averageRate/averageBase-1)*.42,.5,1.2);
+ const eventFactor=state.currentEvent&&state.currentEvent.until>=state.day?(state.currentEvent.demand||1):1;
+ return Math.max(0,Math.round((capacity*.11+2)*season*rep*starsFactor*marketing*loyalty*priceFactor*eventFactor));
 }
 function addGuest(){
  const free=totalRooms()-occupiedRooms();
@@ -116,6 +120,7 @@ function addGuest(){
  const satisfaction=clamp(Math.round(state.service*.45+state.cleanliness*.35+roomTypes[chosen].comfort*.2+rand(-8,8)),20,100);
  state.guests.push({id:state.nextGuestId++,name:pick(['Minh Anh','Hoàng Nam','Gia Hân','Quốc Bảo','Thanh Vy','Tuấn Kiệt','Mai Chi','Khánh Linh','Đức Anh','Bảo Ngọc']),type:chosen,rate,stay,remaining:stay,status:'staying',satisfaction,spent:0});
  state.today.checkins++;state.today.booked++;
+ if(state.contract)state.contract.progress++;
  log('Khách mới nhận phòng '+roomTypes[chosen].label+' · '+money(rate)+'/đêm.');
 }
 function updateGuestMinute(){
@@ -125,7 +130,6 @@ function updateGuestMinute(){
    const extra=state.facilities.restaurant?rand(8,28):rand(0,8);
    state.cash+=extra;state.today.revenue+=extra;state.lifetime.revenue+=extra;g.spent+=extra;
   }
-  if(state.minute%1440===0){g.remaining--;if(g.remaining<=0)checkout(g)}
  }
  state.guests=state.guests.filter(g=>g.status==='staying');
 }
@@ -136,16 +140,18 @@ function checkout(g){
 }
 function operatingCostPerMinute(){
  const rooms=totalRooms();
- const utilities=(rooms*1.35+occupiedRooms()*1.1)*(1-state.bonuses.green);
+ const eventFactor=state.currentEvent&&state.currentEvent.until>=state.day?(state.currentEvent.cost||1):1;
+ const utilities=(rooms*1.35+occupiedRooms()*1.1)*(1-state.bonuses.green)*eventFactor;
  const maintenance=(100-state.condition)*.035+facilityUpkeep()/1440;
  const wages=dailyPayroll()/1440;
- return (utilities+maintenance+wages)*(1-state.bonuses.automation);
+ const lowEnergy=state.energy<25?1.25:1;
+ return (utilities*lowEnergy+maintenance+wages)*(1-state.bonuses.automation);
 }
 function simulateMinute(){
  if(state.minute>=480+DAY_MINUTES){closeDay(true);return}
  state.minute++;
  const demand=guestDemand()/DAY_MINUTES;
- if(Math.random()<demand*1.7)addGuest();
+ if(Math.random()<demand*.55)addGuest();
  updateGuestMinute();
  const occ=occupancy();
  const income=state.guests.filter(g=>g.status==='staying').reduce((a,g)=>a+g.rate/DAY_MINUTES,0);
@@ -157,6 +163,7 @@ function simulateMinute(){
   state.condition=clamp(state.condition-.25+(state.staff.maintenance*.08),15,100);
   state.morale=clamp(state.morale-.12+(state.staff.manager*.06),15,100);
  }
+ if(state.minute%60===0){if(Math.random()<.18)createBooking();processBookings();state.service=clamp(state.service+(state.staff.reception*.025+state.staff.kitchen*.012-1.0)*.018,20,100);if(state.stock<20)state.service=clamp(state.service-.025,0,100)}
  if(state.minute%180===0)maybeEvent();
  if(state.minute>=480+DAY_MINUTES)closeDay(true);
 }
@@ -170,6 +177,8 @@ function maybeEvent(){
 }
 function closeDay(automatic=false){
  const occ=occupancy()*100;
+ for(const guest of [...state.guests]){guest.remaining--;if(guest.remaining<=0)checkout(guest)}
+ state.guests=state.guests.filter(g=>g.status==='staying');
  const revenue=state.today.revenue,expenses=state.today.expenses;
  const profit=revenue-expenses;
  state.history.unshift({day:state.day,revenue,expenses,profit,occupancy:occ,guests:state.today.checkins});
@@ -232,6 +241,7 @@ function renderRooms(){
   const r=roomTypes[type];
   return '<tr><td><strong>'+r.label+'</strong><div class="muted">'+r.capacity+' khách/phòng · tiện nghi '+r.comfort+'/100</div></td><td>'+count+'</td><td>'+staying+'</td><td>'+money(state.prices[type])+'</td><td><button class="mini-button" data-action="price" data-type="'+type+'">Đổi giá</button> <button class="mini-button" data-action="build-room" data-type="'+type+'">Mở rộng</button></td></tr>'
  }).join('');
+ const bookingRows=state.bookings.slice(0,12).map(b=>'<tr><td>#'+b.id+' · '+escapeHTML(b.name)+'</td><td>'+roomTypes[b.type].label+'</td><td>'+fmtTime(480+(b.arrivalAt%DAY_MINUTES))+'</td><td>'+money(b.rate)+'</td><td><span class="tag '+(b.status==='confirmed'?'warn':b.status==='checked-in'?'good':'bad')+'">'+(b.status==='confirmed'?'Đã xác nhận':b.status==='checked-in'?'Đã nhận phòng':'Đã hủy')+'</span></td></tr>').join('');
  const guestRows=state.guests.slice(0,12).map(g=>'<tr><td>#'+g.id+' · '+escapeHTML(g.name)+'</td><td>'+roomTypes[g.type].label+'</td><td>'+g.remaining+' đêm</td><td>'+money(g.rate)+'</td><td><span class="tag good">Đang lưu trú</span></td></tr>').join('');
  return '<div class="dashboard-grid">'+
  metric('Tổng số phòng',number(totalRooms()),'Sức chứa toàn khách sạn')+
@@ -239,7 +249,8 @@ function renderRooms(){
  metric('Phòng trống',number(totalRooms()-occupiedRooms()),'Có thể nhận khách','positive')+
  metric('Giá phòng bình quân',money(roomRevenue()/Math.max(1,totalRooms())),'Giá niêm yết trung bình')+
  panel('Danh mục phòng','Quản lý giá, số lượng và sức chứa','<div class="table-wrap"><table><thead><tr><th>LOẠI PHÒNG</th><th>TỔNG</th><th>ĐANG Ở</th><th>GIÁ/ĐÊM</th><th>THAO TÁC</th></tr></thead><tbody>'+rows+'</tbody></table></div>','span-12')+
- panel('Danh sách khách đang lưu trú','Theo dõi đặt phòng và thời gian trả phòng','<div class="table-wrap"><table><thead><tr><th>KHÁCH</th><th>LOẠI PHÒNG</th><th>CÒN LẠI</th><th>GIÁ/ĐÊM</th><th>TRẠNG THÁI</th></tr></thead><tbody>'+guestRows+'</tbody></table></div>','span-12')+
+ panel('Đặt phòng','Theo dõi yêu cầu, thời gian đến và trạng thái đặt chỗ','<div class="table-wrap"><table><thead><tr><th>MÃ / KHÁCH</th><th>LOẠI PHÒNG</th><th>GIỜ ĐẾN</th><th>GIÁ/ĐÊM</th><th>TRẠNG THÁI</th></tr></thead><tbody>'+bookingRows+'</tbody></table></div>','span-12')+
+ panel('Khách đang lưu trú','Theo dõi khách hiện tại và thời gian trả phòng','<div class="table-wrap"><table><thead><tr><th>KHÁCH</th><th>LOẠI PHÒNG</th><th>CÒN LẠI</th><th>GIÁ/ĐÊM</th><th>TRẠNG THÁI</th></tr></thead><tbody>'+guestRows+'</tbody></table></div>','span-12')+
  '</div>';
 }
 function renderOperations(){
@@ -307,8 +318,10 @@ function renderResearch(){
  metric('Hạng khách sạn',state.stars+' sao','Tăng theo cấp độ')+
  metric('Nghiên cứu hoàn tất',state.researched.length+'/'+research.length,'Năng lực cạnh tranh')+
  metric('Tài sản phòng',number(totalRooms()),'Tổng phòng đang sở hữu')+
+ metric('Chuỗi khách sạn',number(state.branches||1)+' cơ sở','Mạng lưới đang vận hành')+
  panel('Danh mục nghiên cứu','Đầu tư để cải thiện hiệu quả dài hạn','<div class="action-grid">'+cards+'</div>','span-7')+
  panel('Công nghệ đã sở hữu','Các chỉ số cộng thêm từ nghiên cứu',unlocks,'span-5')+
+ panel('Mở rộng tập đoàn','Mỗi chi nhánh bổ sung 10 phòng Standard, 4 phòng Deluxe và tăng chi phí vận hành.', '<div class="kpi-strip"><div><small>CHI NHÁNH</small><b>'+(state.branches||1)+'</b></div><div><small>PHÒNG TOÀN HỆ THỐNG</small><b>'+totalRooms()+'</b></div><div><small>CHI PHÍ ĐẦU TƯ</small><b>$85,000</b></div><div><small>CHI PHÍ DUY TRÌ</small><b>$350/ngày</b></div></div><div class="action-card" style="margin-top:12px"><strong>Mở khách sạn mới</strong><p>Thành lập một cơ sở mới trong chuỗi, tăng quy mô và khả năng phục vụ thị trường.</p><button class="button button-primary" data-action="branch" '+(state.cash<85000?'disabled':'')+'>Đầu tư chi nhánh · $85,000</button></div><div class="inline-note">Chi nhánh mới được gộp vào hệ thống quản lý chung trong phiên bản hiện tại.</div>','span-12')+
  '</div>';
 }
 function render(){
@@ -367,11 +380,19 @@ function doAction(action,el){
  case 'contract':offerContract();break;
  case 'loan':state.cash+=10000;state.debt+=10000;log('Giải ngân khoản vay $10,000.');saveState(true);render();break;
  case 'repay':if(!canSpend(5000)||state.debt<=0)return;const paid=Math.min(5000,state.debt);state.cash-=paid;state.debt-=paid;log('Trả nợ gốc '+money(paid)+'.');saveState(true);render();break;
+ case 'branch':expandBranch();break;
  case 'research':{
   const item=research.find(x=>x.id===id);if(!item||state.researched.includes(id)||!canSpend(item.cost))return;
   spend(item.cost,'Nghiên cứu '+item.name);state.researched.push(id);item.effect(state);saveState(true);render();toast('Đã hoàn tất '+item.name+'.','success');break;
  }
  }
+}
+function expandBranch(){
+ const cost=85000;if(!canSpend(cost))return;
+ spend(cost,'Mở rộng tập đoàn · chi nhánh mới');
+ const n=(state.branches||1)+1;state.branches=n;state.branchNames=state.branchNames||['The First Stay'];state.branchNames.push('Hotel Branch '+n);
+ state.rooms.standard+=10;state.rooms.deluxe+=4;state.staff.reception+=1;state.staff.housekeeping+=2;state.staff.maintenance+=1;
+ state.reputation=clamp(state.reputation+1,0,100);log('Khai trương chi nhánh '+n+' · bổ sung 14 phòng vào hệ thống.');saveState(true);render();toast('Chi nhánh mới đã đi vào hoạt động.','success');
 }
 function runCampaign(kind){
  const cfg=kind==='premium'?{cost:5500,bonus:.32,days:4,name:'Chiến dịch cao cấp'}:{cost:2000,bonus:.15,days:3,name:'Quảng cáo địa phương'};
@@ -382,6 +403,24 @@ function offerContract(){
  const target=Math.max(5,Math.ceil(totalRooms()*.45));state.contract={target,progress:0,reward:target*210,due:state.day+3};
  log('Nhận hợp đồng doanh nghiệp: phục vụ '+target+' lượt khách trong 3 ngày.');
  toast('Hợp đồng mới: mục tiêu '+target+' lượt khách.','success');saveState(true);render();
+}
+function createBooking(){
+ const reserved=state.bookings.filter(b=>b.status==='confirmed');
+ const available=Object.entries(state.rooms).filter(([type,count])=>count>state.guests.filter(g=>g.type===type).length+reserved.filter(b=>b.type===type).length);
+ if(!available.length)return;
+ const type=pick(available.map(x=>x[0]));const rate=Math.round(state.prices[type]*rand(.94,1.12));
+ const booking={id:state.nextBookingId++,name:pick(['Anh Tuấn','Hà My','Minh Khoa','Ngọc Trâm','Phương Linh','Bảo Long','Thu Hà']),type,rate,stay:Math.ceil(rand(1,4)),arrivalAt:(state.day-1)*DAY_MINUTES+(state.minute-480)+Math.round(rand(30,240)),status:'confirmed'};
+ state.bookings.unshift(booking);state.bookings=state.bookings.slice(0,60);log('Đặt chỗ mới #'+booking.id+' · '+roomTypes[type].label+' · '+money(rate)+'/đêm.');
+}
+function processBookings(){
+ const now=(state.day-1)*DAY_MINUTES+(state.minute-480);
+ for(const booking of state.bookings.filter(b=>b.status==='confirmed'&&b.arrivalAt<=now)){
+  if(state.guests.filter(g=>g.type===booking.type).length>=state.rooms[booking.type]){booking.status='cancelled';log('Hủy đặt chỗ #'+booking.id+' do hết phòng.','warning');continue}
+  const satisfaction=clamp(Math.round(state.service*.45+state.cleanliness*.35+roomTypes[booking.type].comfort*.2+rand(-8,8)),20,100);
+  state.guests.push({id:state.nextGuestId++,name:booking.name,type:booking.type,rate:booking.rate,stay:booking.stay,remaining:booking.stay,status:'staying',satisfaction,spent:0});
+  booking.status='checked-in';state.today.checkins++;state.today.booked++;if(state.contract)state.contract.progress++;
+  log('Check-in đặt trước #'+booking.id+' · '+booking.name+'.');
+ }
 }
 function advanceSpeed(){
  state.speed=state.speed===1?2:state.speed===2?4:1;render();
