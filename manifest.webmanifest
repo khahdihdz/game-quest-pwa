@@ -1,15 +1,15 @@
 {
-  "id": "./",
-  "name": "Questbound: Settlement Manager",
-  "short_name": "Questbound",
-  "description": "Xây dựng, quản lý kinh tế và phát triển thị trấn fantasy.",
-  "lang": "vi",
-  "start_url": "./",
-  "scope": "./",
-  "display": "standalone",
-  "orientation": "any",
-  "background_color": "#0b151b",
-  "theme_color": "#10201e",
-  "categories": ["games", "simulation", "strategy"],
-  "icons": [{"src":"./assets/icon.svg","sizes":"any","type":"image/svg+xml","purpose":"any"}]
+  "id":"./",
+  "name":"Empire Builder 3D",
+  "short_name":"Empire Builder",
+  "description":"Build, manage and grow your modern 3D city empire.",
+  "lang":"vi",
+  "start_url":"./",
+  "scope":"./",
+  "display":"standalone",
+  "orientation":"any",
+  "background_color":"#0a1220",
+  "theme_color":"#101b2d",
+  "categories":["games","simulation","strategy"],
+  "icons":[{"src":"./assets/icon.svg","sizes":"any","type":"image/svg+xml","purpose":"any"}]
 }

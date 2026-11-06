@@ -1,28 +1,43 @@
-# Questbound: Settlement Manager
+# Empire Builder 3D
 
-Vietnamese-first town-management simulation PWA built with vanilla HTML, CSS and JavaScript.
+A small-scale modern city management simulation built as a browser game and installable Android PWA.
+
+## Game modes
+- **Campaign:** complete city-building objectives and collect rewards.
+- **Sandbox:** build freely and shape your city.
 
 ## Gameplay
-- Manage gold, food, wood, stone, population and community morale.
-- Build and upgrade farms, lumber camps, quarries, houses and markets (up to level 5).
-- Recruit residents while keeping housing capacity and food consumption under control.
-- Advance the day to collect production, feed residents and grow the settlement.
-- Buy and sell food to balance the town economy.
-- Level up the town, expand housing capacity and review the activity log.
-- Local browser save and offline app-shell caching.
+- Interactive 3D city rendered with Three.js.
+- Orbit, rotate, zoom and inspect the city.
+- Place residential, commercial, industrial and public-service buildings on a 9×9 city grid.
+- Manage budget, population, happiness, employment, electricity, water and traffic.
+- Advance simulation days, earn tax/business income and pay city upkeep.
+- Complete missions and claim rewards.
+- Rename your city and save progress locally in your browser.
+
+## Controls
+- Select a building in the right panel, then tap/click an empty tile.
+- Drag the city view to orbit; use the controls to zoom and rotate.
+- Switch to Inspect to view an existing building.
+- Use Pause, Speed and Next Day to control simulation time.
 
 ## Run locally
-Run `python -m http.server 8080` and open `http://localhost:8080`. Service Workers require localhost or HTTPS.
+Serve this folder over localhost, for example:
+`python -m http.server 8080`, then open `http://localhost:8080`.
+
+Three.js is loaded from jsDelivr, so the initial 3D engine load requires an internet connection. The PWA caches the app shell; offline 3D rendering depends on the browser cache having retained the Three.js module.
 
 ## GitHub Pages
-In **Settings → Pages**, select **GitHub Actions** as the build source. Push to `main` to deploy.
-Expected URL: https://khahdihdz.github.io/game-quest-pwa/
+Enable **Settings → Pages → GitHub Actions**. Every push to `main` runs validation and deploys the site.
 
-## AI-assisted development
-Free cloud coding assistants can help extend the game during development (availability and quotas vary). The published game requires no AI API key and makes no external runtime AI calls.
+Game URL: https://khahdihdz.github.io/game-quest-pwa/
 
-## Privacy
-Progress is stored locally in browser storage. No account, analytics or game backend is used.
+## Save data and privacy
+Game progress is stored locally in browser localStorage. No account or game server is required. Clearing browser site data also clears the local save.
+
+## Credits
+- Three.js for real-time 3D rendering.
+- Built for web browsers and Android PWA installation.
 
 ## License
 MIT
