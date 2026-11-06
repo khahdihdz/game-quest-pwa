@@ -4,7 +4,7 @@ const $=id=>document.getElementById(id);
 const ui={viewport:$('viewport'),overlay:$('overlay'),upgrade:$('upgrade'),pause:$('pause'),result:$('result'),toast:$('toast')};
 const store={get(k,d){try{return JSON.parse(localStorage.getItem('void-'+k))??d}catch{return d}},set(k,v){try{localStorage.setItem('void-'+k,JSON.stringify(v))}catch{}}};
 let scene,camera,renderer,clock,player,arena,stars=[],enemies=[],bullets=[],enemyShots=[],orbs=[],particles=[],decor=[];
-let running=false,paused=false,choosing=false,mode='campaign',elapsed=0,kills=0,score=0,wave=1,level=1,xp=0,xpNeed=12,credits=store.get('credits',0),best=store.get('best',0),hp=100,maxHp=100,damage=18,fireRate=.48,bulletSpeed=19,moveSpeed=8,magnet=3,armor=0,projectiles=1,regen=0,spawnClock=0,shotClock=0,boss=null,bossSpawned=false,runId=0;
+let running=false,paused=false,choosing=false,mode='campaign',elapsed=0,kills=0,score=0,wave=1,level=1,xp=0,xpNeed=12,credits=store.get('credits',0),best=store.get('best',0),hp=100,maxHp=100,damage=18,fireRate=.48,bulletSpeed=19,moveSpeed=8,magnet=3,armor=0,projectiles=1,regen=0,spawnClock=0,shotClock=0,boss=null,bossSpawned=false,bossWave=0,runId=0;
 const input={x:0,z:0,keys:new Set(),pointer:false,joyId:null,joyX:0,joyY:0};
 const upgrades=[
 {id:'power',name:'Plasma Core',desc:'+35% sát thương đạn',glyph:'✦',apply:()=>damage*=1.35},
@@ -41,7 +41,7 @@ function makeEnemy(type='drone',isBoss=false){
  const eye=mesh(new THREE.SphereGeometry(isBoss?.2:.12,8,8),new THREE.MeshBasicMaterial({color:0xfff1c9}),0,isBoss?1.8:.92,.52);g.add(eye);
  if(isBoss){const halo=mesh(new THREE.TorusGeometry(2,.09,8,48),new THREE.MeshBasicMaterial({color:0xff537a}));halo.rotation.x=Math.PI/2;halo.position.y=.1;g.add(halo);g.userData.maxHp=900+wave*220;g.userData.hp=g.userData.maxHp;g.userData.speed=1.45;g.userData.damage=22;g.userData.radius=1.5}
  else{g.userData.maxHp=type==='brute'?115:type==='runner'?36:type==='spitter'?48:58;g.userData.hp=g.userData.maxHp;g.userData.speed=type==='brute'?1.8:type==='runner'?4.7:type==='spitter'?1.9:2.7;g.userData.damage=type==='brute'?18:10;g.userData.radius=type==='brute'?.85:.58}
- g.userData.type=type;g.userData.isBoss=isBoss;g.userData.attack=0;g.userData.hit=0;let a=Math.random()*Math.PI*2,r=18+Math.random()*3;g.position.set(Math.cos(a)*r,0,Math.sin(a)*r);scene.add(g);enemies.push(g);if(isBoss){boss=g;ui.bossWrap=$('boss-wrap');ui.bossWrap.classList.remove('hidden');$('boss-hp-label').textContent='100%';$('boss-bar').style.width='100%';showToast('⚠ VOID TITAN ĐÃ XUẤT HIỆN')}
+ g.userData.type=type;g.userData.isBoss=isBoss;g.userData.attack=0;g.userData.hit=0;let a=Math.random()*Math.PI*2,r=18+Math.random()*3;g.position.set(Math.cos(a)*r,0,Math.sin(a)*r);scene.add(g);enemies.push(g);if(isBoss){boss=g;bossWave=wave;bossSpawned=true;ui.bossWrap=$('boss-wrap');ui.bossWrap.classList.remove('hidden');$('boss-hp-label').textContent='100%';$('boss-bar').style.width='100%';showToast('⚠ VOID TITAN ĐÃ XUẤT HIỆN')}
  return g;
 }
 function spawnEnemy(){if(enemies.length>95)return;let t='drone',roll=Math.random();if(wave>1&&roll<.18)t='runner';else if(wave>2&&roll<.34)t='spitter';else if(wave>3&&roll<.52)t='brute';makeEnemy(t)}
@@ -49,7 +49,7 @@ function spawnBoss(){if(bossSpawned)return;bossSpawned=true;makeEnemy('boss',tru
 function clearGroup(arr){for(const o of arr)scene.remove(o);arr.length=0}
 function resetRun(){
  runId++;clearGroup(enemies);clearGroup(bullets);clearGroup(enemyShots);clearGroup(orbs);clearGroup(particles);if(boss){scene.remove(boss);boss=null}
- elapsed=0;kills=0;score=0;wave=1;level=1;xp=0;xpNeed=12;hp=100;maxHp=100;damage=18;fireRate=.48;bulletSpeed=19;moveSpeed=8;magnet=3;armor=0;projectiles=1;regen=0;spawnClock=1;shotClock=0;bossSpawned=false;choosing=false;paused=false;player.position.set(0,0,0);$('boss-wrap').classList.add('hidden');updateHUD();ui.overlay.classList.add('hidden');ui.upgrade.classList.add('hidden');ui.pause.classList.add('hidden');ui.result.classList.add('hidden');running=true;clock.getDelta();
+ elapsed=0;kills=0;score=0;wave=1;level=1;xp=0;xpNeed=12;hp=100;maxHp=100;damage=18;fireRate=.48;bulletSpeed=19;moveSpeed=8;magnet=3;armor=0;projectiles=1;regen=0;spawnClock=1;shotClock=0;bossSpawned=false;bossWave=0;choosing=false;paused=false;player.position.set(0,0,0);$('boss-wrap').classList.add('hidden');updateHUD();ui.overlay.classList.add('hidden');ui.upgrade.classList.add('hidden');ui.pause.classList.add('hidden');ui.result.classList.add('hidden');running=true;clock.getDelta();
 }
 function updateHUD(){const m=Math.floor(elapsed/60),s=Math.floor(elapsed%60);$('time').textContent=String(m).padStart(2,'0')+':'+String(s).padStart(2,'0');$('wave').textContent=String(wave).padStart(2,'0');$('kills').textContent=kills;$('level').textContent=level;$('hp-label').textContent=Math.ceil(hp)+' / '+maxHp;$('hp-bar').style.width=Math.max(0,hp/maxHp*100)+'%';$('xp-label').textContent=xp+' / '+xpNeed+' XP';$('xp-bar').style.width=xp/xpNeed*100+'%';$('coins').textContent=credits;$('best').textContent=best}
 function updateMenu(){ $('menu-best').textContent=best;$('menu-coins').textContent=credits;$('coins').textContent=credits;$('best').textContent=best}
@@ -68,8 +68,8 @@ function startGame(){mode=document.querySelector('.mode.active').dataset.mode;re
 function goMenu(){running=false;paused=false;ui.pause.classList.add('hidden');ui.result.classList.add('hidden');ui.upgrade.classList.add('hidden');ui.overlay.classList.remove('hidden');updateMenu()}
 function moveInput(){let x=0,z=0;if(input.keys.has('KeyA')||input.keys.has('ArrowLeft'))x--;if(input.keys.has('KeyD')||input.keys.has('ArrowRight'))x++;if(input.keys.has('KeyW')||input.keys.has('ArrowUp'))z--;if(input.keys.has('KeyS')||input.keys.has('ArrowDown'))z++;x+=input.x;z+=input.z;const v=new THREE.Vector2(x,z);if(v.length()>1)v.normalize();return v}
 function frame(){
- const dt=Math.min(clock.getDelta(),.04);if(running&&!choosing){elapsed+=dt;const newWave=Math.floor(elapsed/45)+1;if(newWave>wave){wave=newWave;showToast('WAVE '+wave+' INCOMING');if(wave%2===0)credits+=2}
- if(elapsed>=300&&!bossSpawned)spawnBoss();if(mode==='campaign'&&wave>=10&&elapsed>=450&&!bossSpawned)spawnBoss();
+ const dt=Math.min(clock.getDelta(),.04);if(running&&!choosing){elapsed+=dt;const newWave=Math.floor(elapsed/50)+1;if(newWave>wave){wave=newWave;showToast('WAVE '+wave+' INCOMING');if(wave%2===0)credits+=2}
+ if(wave%5===0&&bossWave!==wave&&!boss)spawnBoss();
  const mv=moveInput();player.position.x+=mv.x*moveSpeed*dt;player.position.z+=mv.y*moveSpeed*dt;const len=Math.hypot(player.position.x,player.position.z);if(len>16.2){player.position.x*=16.2/len;player.position.z*=16.2/len}
  player.rotation.y=Math.atan2(mv.x,mv.y);player.children[1].rotation.y+=dt*2;player.children[2].rotation.z+=dt*1.5;
  shotClock-=dt;if(shotClock<=0){fire();shotClock=fireRate}
