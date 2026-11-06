@@ -1,4 +1,4 @@
-name: Deploy Hotel Empire to GitHub Pages
+name: Deploy Hotel Empire Underworld to GitHub Pages
 on:
   push:
     branches: [main]
@@ -16,7 +16,7 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-      - name: Validate project files
+      - name: Validate game files
         run: |
           set -e
           test -s index.html
@@ -25,8 +25,9 @@ jobs:
           test -s manifest.webmanifest
           test -s sw.js
           node --check game.js
-          node -e "const fs=require('fs'); JSON.parse(fs.readFileSync('manifest.webmanifest','utf8')); console.log('Manifest OK')"
-          ! grep -Eqi 'three\.js|unpkg\.com|jsdelivr\.net|cdnjs\.cloudflare\.com' index.html game.js style.css
+          node -e "JSON.parse(require('fs').readFileSync('manifest.webmanifest','utf8')); console.log('Manifest OK')"
+          ! grep -Eqi 'bootstrap|react|vue|angular|three\.js|phaser|unpkg\.com|jsdelivr\.net|cdnjs\.cloudflare\.com|fonts\.googleapis\.com' index.html game.js style.css
+          ! grep -Eqi '<img|<audio|<video' index.html
       - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@v3
         with:

@@ -1,47 +1,34 @@
-# Hotel Empire
+# Hotel Empire: Underworld
 
-Game mô phỏng quản lý khách sạn quy mô lớn, thuần văn bản, chạy trên trình duyệt và hỗ trợ cài đặt dạng PWA.
+Game mô phỏng quản lý khách sạn phong cách noir, kết hợp vận hành kinh doanh hợp pháp với các lựa chọn cốt truyện về những mối quan hệ bí mật hoàn toàn hư cấu.
 
-## Đặc điểm
+## Công nghệ
+- HTML5, CSS3 và JavaScript thuần (Vanilla JS).
+- Không framework, Bootstrap, game engine, thư viện ngoài, CDN, API bên thứ ba hoặc asset hình ảnh/âm thanh/font bên ngoài.
+- PWA cài đặt được trên trình duyệt Android và desktop.
+- Lưu tiến trình bằng LocalStorage, 3 khe lưu, xuất/nhập JSON.
+- GitHub Pages deploy tự động bằng GitHub Actions.
 
-- Dashboard điều hành bằng số liệu, bảng biểu, trạng thái và nhật ký; không dùng hình ảnh, sprite, âm thanh, font ngoài, asset ngoài hoặc framework.
-- HTML5 + CSS3 + Vanilla JavaScript.
-- Mô phỏng kết hợp: thời gian trong game tự chạy, có thể tạm dừng, tăng tốc và chốt ngày thủ công.
-- Quản lý danh mục phòng, giá phòng, khách lưu trú, công suất, đặt chỗ và doanh thu.
-- Quản lý vận hành: dịch vụ, vệ sinh, bảo trì, năng lượng, vật tư và tiện ích.
-- Quản trị nhân sự: lễ tân, buồng phòng, bếp, kỹ thuật và quản lý; lương, tinh thần và đào tạo.
-- Thị trường: nhu cầu theo mùa, danh tiếng, hạng sao, marketing và hợp đồng doanh nghiệp.
-- Tài chính: dòng tiền, chi phí, lợi nhuận, tài sản, khoản vay và lãi vay.
-- Nghiên cứu: Revenue Management, Service Excellence, Smart Operations, Loyalty Program và Green Hotel.
-- Sự kiện ngẫu nhiên, báo cáo theo ngày, thăng cấp và mở rộng khách sạn.
-- Tự động lưu bằng LocalStorage; mô phỏng tiến trình offline tối đa 8 giờ.
-- Giao diện responsive cho desktop và điện thoại.
+## Gameplay
+- Quản lý danh mục phòng, giá, khách lưu trú và công suất.
+- Tuyển dụng lễ tân, buồng phòng, an ninh và quản lý.
+- Điều hành vệ sinh, bảo trì, chất lượng dịch vụ, quảng bá và kiểm tra nội bộ.
+- Theo dõi tiền mặt, khoản vay, lương, chi phí và báo cáo ngày.
+- Tương tác với các phe phái hư cấu; mỗi thỏa thuận làm thay đổi phần thưởng và áp lực điều tra.
+- Nhiều kết cục tùy theo dòng tiền, danh tiếng và mức rủi ro.
 
 ## Chơi game
+Mở GitHub Pages, bắt đầu tại Nocturne Hotel. Dùng thanh điều hướng để quản lý từng bộ phận. Thời gian tự chạy; có thể tạm dừng, đổi tốc độ hoặc kết thúc ngày để chốt sổ.
 
-Mở GitHub Pages của repository. Bắt đầu với khách sạn The First Stay, 20 phòng, vốn ban đầu $120,000 và khoản vay $30,000.
+## Chạy cục bộ
+Mở index.html trong trình duyệt để chơi. PWA và service worker cần HTTPS hoặc localhost.
 
-1. Theo dõi bảng Tổng quan và nhật ký hoạt động.
-2. Điều chỉnh giá, xây thêm phòng và tuyển nhân sự phù hợp.
-3. Duy trì vệ sinh, chất lượng dịch vụ, năng lượng và tình trạng cơ sở.
-4. Đầu tư tiện ích, marketing và nghiên cứu khi dòng tiền cho phép.
-5. Theo dõi khoản vay, chốt ngày và mở rộng quy mô.
+## Kiểm tra
+- node --check game.js
+- Đọc và parse manifest.webmanifest bằng JSON.parse.
 
-## Điều khiển
-
-- **Tạm dừng / Tiếp tục:** dừng hoặc chạy mô phỏng.
-- **Tốc độ:** chuyển giữa 1×, 2× và 4×.
-- **Chốt ngày:** kết sổ và chuyển sang ngày kế tiếp.
-- **Lưu tiến trình ngay:** ghi trạng thái vào LocalStorage.
-
-## Triển khai
-
-GitHub Actions kiểm tra JavaScript, manifest và các tệp PWA trước khi deploy thư mục gốc lên GitHub Pages mỗi khi push vào nhánh `main`.
-
-## Lưu ý dữ liệu
-
-Tiến trình lưu trên thiết bị và trình duyệt hiện tại; xóa dữ liệu trình duyệt sẽ xóa save. Offline progress được giới hạn tối đa 8 giờ mỗi lần quay lại. Không có backend, tài khoản hoặc đồng bộ đám mây.
+## Nội dung
+Tên phe phái, giao kèo và các diễn biến điều tra là yếu tố hư cấu trong trò chơi; không mô phỏng hay hướng dẫn hoạt động phạm pháp ngoài đời.
 
 ## License
-
-MIT.
+MIT

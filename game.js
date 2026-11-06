@@ -1,460 +1,158 @@
 'use strict';
-(() => {
-const $ = id => document.getElementById(id);
-const STORE_KEY = 'hotel-empire-save-v1';
-const DAY_MINUTES = 900;
-const MAX_OFFLINE_MS = 8 * 60 * 60 * 1000;
-const money = n => '$' + Math.round(n).toLocaleString('en-US');
-const number = n => Math.floor(n).toLocaleString('vi-VN');
-const clamp = (n,min,max) => Math.max(min,Math.min(max,n));
-const rand = (a,b) => Math.random()*(b-a)+a;
-const pick = arr => arr[Math.floor(Math.random()*arr.length)];
-const escapeHTML = value => String(value).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-const roomTypes = {
- standard:{name:'Standard',label:'Tiêu chuẩn',base:75,comfort:55,capacity:2,build:8500,clean:8},
- deluxe:{name:'Deluxe',label:'Cao cấp',base:125,comfort:72,capacity:2,build:14500,clean:13},
- suite:{name:'Suite',label:'Suite',base:220,comfort:88,capacity:3,build:28000,clean:22},
- family:{name:'Family',label:'Gia đình',base:175,comfort:80,capacity:4,build:22000,clean:18}
-};
-const roles = {
- reception:{name:'Lễ tân',salary:1250,productivity:1.0},
- housekeeping:{name:'Buồng phòng',salary:1050,productivity:1.0},
- kitchen:{name:'Bếp & nhà hàng',salary:1350,productivity:1.0},
- maintenance:{name:'Kỹ thuật',salary:1450,productivity:1.0},
- manager:{name:'Quản lý',salary:2600,productivity:1.0}
-};
-const facilities = {
- restaurant:{name:'Nhà hàng',cost:18000,upkeep:230,bonus:8,desc:'Tăng doanh thu phụ trợ và mức hài lòng.'},
- spa:{name:'Spa & wellness',cost:26000,upkeep:310,bonus:10,desc:'Thu hút khách nghỉ dưỡng, tăng giá trị đơn.'},
- conference:{name:'Phòng hội nghị',cost:34000,upkeep:390,bonus:12,desc:'Mở khóa khách đoàn và hợp đồng doanh nghiệp.'},
- pool:{name:'Hồ bơi',cost:22000,upkeep:280,bonus:9,desc:'Tăng sức hút và điểm đánh giá.'},
- airport:{name:'Đưa đón sân bay',cost:12500,upkeep:180,bonus:5,desc:'Tăng chuyển đổi đặt phòng.'}
-};
-const research = [
-{id:'yield',name:'Revenue Management',cost:12000,desc:'Tối ưu giá theo nhu cầu; tăng doanh thu phòng 8%.',effect:s=>s.bonuses.yield+=.08},
-{id:'service',name:'Service Excellence',cost:16000,desc:'Quy trình dịch vụ tốt hơn; tăng chất lượng 8 điểm.',effect:s=>s.bonuses.service+=8},
-{id:'automation',name:'Smart Operations',cost:24000,desc:'Tự động hóa vận hành; giảm chi phí vận hành 10%.',effect:s=>s.bonuses.automation+=.1},
-{id:'loyalty',name:'Loyalty Program',cost:20000,desc:'Khách quay lại thường xuyên hơn; tăng nhu cầu 10%.',effect:s=>s.bonuses.loyalty+=.1},
-{id:'green',name:'Green Hotel',cost:28000,desc:'Tiết kiệm năng lượng và tăng danh tiếng.',effect:s=>s.bonuses.green+=.12}
-];
-const events = [
-{title:'Hội chợ du lịch trong thành phố',text:'Lượng khách tìm phòng tăng trong ngày.',demand:1.28,rep:0},
-{title:'Đợt nắng nóng',text:'Chi phí điện tăng do điều hòa hoạt động liên tục.',cost:1.22,rep:0},
-{title:'Bài đánh giá tích cực lan truyền',text:'Khách mới tin tưởng thương hiệu hơn.',demand:1.12,rep:3},
-{title:'Sự cố đường ống nước',text:'Một khoản bảo trì khẩn cấp phát sinh.',expense:1800,rep:-2},
-{title:'Đoàn khách doanh nghiệp',text:'Có cơ hội nhận hợp đồng lưu trú theo đoàn.',contract:true,rep:0},
-{title:'Mùa thấp điểm',text:'Nhu cầu đặt phòng giảm tạm thời.',demand:.78,rep:0},
-{title:'Đầu bếp được vinh danh',text:'Nhà hàng được chú ý, khách hài lòng hơn.',rep:2,demand:1.08},
-{title:'Đối thủ khai trương',text:'Thị trường cạnh tranh hơn trong vài ngày.',demand:.9,rep:0}
-];
-const freshState = () => ({
-version:1,hotelName:'The First Stay',location:'Đà Nẵng · Việt Nam',day:1,minute:480,paused:false,speed:1,
-cash:120000,debt:30000,reputation:65,stars:2,experience:0,level:1,
-rooms:{standard:12,deluxe:6,suite:2,family:0},branches:1,branchNames:['The First Stay'],occupied:0,bookings:[],guests:[],nextGuestId:1,nextBookingId:1, 
-prices:{standard:75,deluxe:125,suite:220,family:175},staff:{reception:3,housekeeping:5,kitchen:2,maintenance:1,manager:1},
-morale:78,service:68,cleanliness:86,condition:92,energy:85,stock:100,
-facilities:{restaurant:true,spa:false,conference:false,pool:false,airport:false},
-researched:[],bonuses:{yield:0,service:0,automation:0,loyalty:0,green:0},
-marketing:0,marketingUntil:0,contract:null,history:[],log:[],lastSave:Date.now(),
-today:{revenue:0,expenses:0,checkins:0,checkouts:0,complaints:0,booked:0},
-lifetime:{revenue:0,guests:0,days:0,profit:0}
-});
-let state;
-let currentTab='overview';
-let timer=null;
-let lastRender=0;
-let toastTimer=null;
-function loadState(){
- try{
-  const raw=localStorage.getItem(STORE_KEY);
-  if(!raw)return freshState();
-  const parsed=JSON.parse(raw);
-  const base=freshState();
-  const merged={...base,...parsed,rooms:{...base.rooms,...parsed.rooms},prices:{...base.prices,...parsed.prices},staff:{...base.staff,...parsed.staff},facilities:{...base.facilities,...parsed.facilities},bonuses:{...base.bonuses,...parsed.bonuses},today:{...base.today,...parsed.today},lifetime:{...base.lifetime,...parsed.lifetime}};
-  return merged;
- }catch{return freshState()}
+(()=>{
+const $=id=>document.getElementById(id), KEY='hotel-underworld-save-v1';
+const fmt=n=>Math.round(n).toLocaleString('vi-VN')+' ₫', clamp=(n,a=0,b=100)=>Math.max(a,Math.min(b,n));
+const pick=a=>a[Math.floor(Math.random()*a.length)], esc=s=>String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const rooms={standard:{name:'Phòng tiêu chuẩn',rate:850000,cost:18000000},deluxe:{name:'Phòng Deluxe',rate:1350000,cost:29000000},suite:{name:'Suite riêng tư',rate:2400000,cost:52000000},penthouse:{name:'Penthouse',rate:4200000,cost:95000000}};
+const roles={reception:{name:'Lễ tân',salary:9500000},housekeeping:{name:'Buồng phòng',salary:8200000},security:{name:'An ninh',salary:12500000},manager:{name:'Quản lý',salary:18000000}};
+const factions=[{id:'velvet',name:'Hội Velvet',desc:'Những vị khách kín tiếng, coi trọng sự riêng tư.',risk:7},{id:'harbor',name:'Nhóm Cảng Đêm',desc:'Một mạng lưới thương nhân bí ẩn trong thế giới hư cấu.',risk:12},{id:'patron',name:'Nhà bảo trợ',desc:'Giới đầu tư kín tiếng, luôn muốn đổi lợi ích lấy ảnh hưởng.',risk:9}];
+const fresh=()=>({day:1,hour:8,paused:false,speed:1,cash:3500000000,debt:900000000,rep:62,suspicion:14,stars:2,rooms:{standard:12,deluxe:5,suite:1,penthouse:0},prices:{standard:850000,deluxe:1350000,suite:2400000,penthouse:4200000},staff:{reception:3,housekeeping:4,security:1,manager:1},guests:[],nextGuest:1,quality:72,clean:84,condition:91,morale:76,cover:68,network:18,activeDeal:null,history:[],log:[],event:null,last:Date.now(),today:{revenue:0,cost:0,arrivals:0},lifetime:{revenue:0,guests:0,days:0},ending:null});
+let s,tab='overview',timer,toastTimer;
+function note(msg,type=''){s.log.unshift({day:s.day,hour:s.hour,msg,type});s.log=s.log.slice(0,60)}
+function toast(msg){const el=$('toast');el.textContent=msg;el.classList.add('show');clearTimeout(toastTimer);toastTimer=setTimeout(()=>el.classList.remove('show'),2400)}
+function totalRooms(){return Object.values(s.rooms).reduce((a,b)=>a+b,0)}
+function occupied(){return s.guests.length}
+function freeRooms(){return Math.max(0,totalRooms()-occupied())}
+function occupancy(){return totalRooms()?occupied()/totalRooms():0}
+function payroll(){return Object.entries(s.staff).reduce((n,[k,v])=>n+v*roles[k].salary/30,0)}
+function save(silent=true){s.last=Date.now();try{localStorage.setItem(KEY,JSON.stringify(s));if(!silent)toast('Đã lưu tiến trình.')}catch{toast('Không thể lưu trên thiết bị này.')}}
+function load(){try{const v=JSON.parse(localStorage.getItem(KEY));if(!v)return fresh();const b=fresh();return {...b,...v,rooms:{...b.rooms,...v.rooms},prices:{...b.prices,...v.prices},staff:{...b.staff,...v.staff},today:{...b.today,...v.today},lifetime:{...b.lifetime,...v.lifetime}}}catch{return fresh()}}
+function logPanel(){return s.log.slice(0,9).map(x=>'<div class="feed-item"><time>D'+x.day+' · '+String(x.hour).padStart(2,'0')+':00</time><p>'+esc(x.msg)+'</p></div>').join('')||'<div class="empty">Chưa có hoạt động.</div>'}
+function metric(label,value,sub,tone=''){return '<div class="metric"><label>'+label+'</label><strong class="'+tone+'">'+value+'</strong><small>'+sub+'</small></div>'}
+function panel(title,sub,body,size='s6'){return '<section class="panel '+size+'"><div class="panel-head"><div><h3>'+title+'</h3><div class="sub">'+sub+'</div></div></div>'+body+'</section>'}
+function meter(label,value,color=''){return '<div class="meter-row"><span>'+label+'</span><div class="track"><i class="'+color+'" style="width:'+clamp(value)+'%"></i></div><b>'+Math.round(value)+'</b></div>'}
+const tabs={overview:['BẢNG ĐIỀU KHIỂN','Tổng quan khách sạn','Một khách sạn bình thường. Ít nhất là trên giấy tờ.'],rooms:['LƯU TRÚ','Phòng & khách','Công suất, giá phòng và danh sách khách đang lưu trú.'],staff:['NHÂN SỰ','Đội ngũ vận hành','Tuyển đúng người, giữ bí mật và kiểm soát chi phí.'],operations:['HẬU TRƯỜNG','Vận hành khách sạn','Chất lượng dịch vụ, vệ sinh, bảo trì và mức độ che chắn.'],underworld:['HỒ SƠ MẬT','Mạng lưới bí mật','Các thỏa thuận hoàn toàn hư cấu, luôn đi kèm rủi ro.'],finance:['PHÒNG TÀI CHÍNH','Tài chính & đầu tư','Dòng tiền, khoản vay và quyết định mở rộng.'],records:['LƯU TRỮ','Hồ sơ & lưu game','Quản lý các khe lưu, xuất hoặc nhập tiến trình.']};
+function render(){
+ $('cash').textContent=fmt(s.cash);$('day').textContent=String(s.day).padStart(2,'0');$('clock').textContent=String(s.hour).padStart(2,'0')+':00';
+ $('stars').textContent='★'.repeat(s.stars)+'☆'.repeat(5-s.stars);$('rep').textContent=Math.round(s.rep)+'/100';$('repbar').style.width=s.rep+'%';
+ $('pause').textContent=s.paused?'Tiếp tục':'Tạm dừng';$('runstate').textContent=s.paused?'MÔ PHỎNG TẠM DỪNG':'MÔ PHỎNG ĐANG CHẠY';$('status-line').textContent=s.paused?'Tạm dừng':s.ending?'Kết thúc':'Đang vận hành';
+ document.querySelectorAll('.nav-btn').forEach(b=>b.classList.toggle('active',b.dataset.tab===tab));
+ const [k,t,d]=tabs[tab];$('kicker').textContent=k;$('title').textContent=t;$('subtitle').textContent=d;
+ $('speed').textContent='Tốc độ '+s.speed+'×';$('endday').disabled=!!s.ending;
+ $('content').innerHTML=({overview,rooms:roomsPage,staff:staffPage,operations:operationsPage,underworld:underworldPage,finance:financePage,records:recordsPage})[tab]();
+ if(tab==='records')updateSlots();
 }
-function saveState(silent=false){
- state.lastSave=Date.now();
- try{localStorage.setItem(STORE_KEY,JSON.stringify(state));if(!silent)toast('Đã lưu tiến trình.','success')}
- catch{if(!silent)toast('Không thể lưu. Bộ nhớ trình duyệt có thể đã đầy.','error')}
+function overview(){
+ const profit=s.today.revenue-s.today.cost,activity=s.event?'<div class="notice">'+esc(s.event.title)+' — '+esc(s.event.text)+'</div>':'<div class="notice info">Đêm nay có vẻ yên tĩnh. Đừng chủ quan.</div>';
+ const deal=s.activeDeal?'<div class="notice danger">Thỏa thuận đang mở: '+esc(s.activeDeal.name)+' · còn '+s.activeDeal.left+' ngày.</div>':'<div class="notice info">Không có thỏa thuận bí mật nào đang chờ xử lý.</div>';
+ return '<div class="grid">'+metric('Doanh thu hôm nay',fmt(s.today.revenue),'Thu từ khách lưu trú','green')+metric('Lợi nhuận tạm tính',(profit<0?'−':'')+fmt(Math.abs(profit)),'Sau chi phí vận hành',profit>=0?'green':'red')+metric('Công suất phòng',Math.round(occupancy()*100)+'%',occupied()+'/'+totalRooms()+' phòng','gold')+metric('Áp lực điều tra',Math.round(s.suspicion)+'/100','Càng cao càng nguy hiểm',s.suspicion>65?'red':'gold')+
+ panel('Chỉ số khách sạn','Những yếu tố tác động tới trải nghiệm và hoạt động','<div class="meter-list">'+meter('Danh tiếng',s.rep)+meter('Chất lượng',s.quality,'green')+meter('Vệ sinh',s.clean,'green')+meter('Cơ sở vật chất',s.condition)+meter('Tinh thần',s.morale)+meter('Vỏ bọc kinh doanh',s.cover,'green')+'</div>','s5')+
+ panel('Tình hình trong ngày','Các diễn biến đáng chú ý',activity+deal+'<div class="feed">'+logPanel()+'</div>','s7')+
+ panel('Quyết định nhanh','Các hành động điều hành thường dùng','<div class="actions"><div class="action-card"><b>Chiến dịch quảng bá</b><p>Tăng khách mới và cải thiện hình ảnh công khai.</p><button class="btn" data-act="marketing">Chi 25 triệu</button></div><div class="action-card"><b>Bảo trì khẩn cấp</b><p>Cải thiện cơ sở vật chất và chất lượng.</p><button class="btn" data-act="maintenance">Chi 18 triệu</button></div><div class="action-card"><b>Kiểm tra nội bộ</b><p>Giảm áp lực và củng cố quy trình.</p><button class="btn" data-act="audit">Chi 12 triệu</button></div><div class="action-card"><b>Đặt giá linh hoạt</b><p>Điều chỉnh mức giá phòng theo phân khúc.</p><button class="btn" data-act="pricing">Điều chỉnh</button></div></div>','s12')+'</div>';
 }
-function log(message,type='info'){
- state.log.unshift({day:state.day,minute:state.minute,text:message,type});
- state.log=state.log.slice(0,80);
+function roomsPage(){
+ const rows=Object.entries(s.rooms).map(([id,n])=>'<tr><td><b>'+rooms[id].name+'</b></td><td>'+n+'</td><td>'+fmt(s.prices[id])+'</td><td>'+fmt(rooms[id].cost)+'</td><td><button class="mini" data-act="build" data-id="'+id+'">Xây thêm</button> <button class="mini" data-act="price" data-id="'+id+'">Đổi giá</button></td></tr>').join('');
+ const guests=s.guests.map(g=>'<tr><td>'+esc(g.name)+'</td><td>'+rooms[g.type].name+'</td><td>'+g.nights+' đêm</td><td>'+fmt(g.rate)+'/đêm</td><td><span class="tag good">Đang ở</span></td></tr>').join('')||'<tr><td colspan="5">Chưa có khách lưu trú.</td></tr>';
+ return '<div class="grid">'+metric('Tổng số phòng',totalRooms(),'Sức chứa hiện tại')+metric('Phòng đang có khách',occupied(),'Khách lưu trú')+metric('Phòng còn trống',freeRooms(),'Có thể nhận khách')+metric('Giá phòng trung bình',fmt(Object.values(s.prices).reduce((a,b)=>a+b,0)/4),'Theo cấu hình')+
+ panel('Danh mục phòng','Đầu tư thêm phòng để tăng công suất','<div class="table-wrap"><table><thead><tr><th>LOẠI PHÒNG</th><th>SỐ LƯỢNG</th><th>GIÁ/ĐÊM</th><th>CHI PHÍ XÂY</th><th>HÀNH ĐỘNG</th></tr></thead><tbody>'+rows+'</tbody></table></div>','s12')+
+ panel('Khách lưu trú','Khách hàng hiện tại của khách sạn','<div class="table-wrap"><table><thead><tr><th>KHÁCH</th><th>HẠNG PHÒNG</th><th>CÒN LẠI</th><th>GIÁ</th><th>TRẠNG THÁI</th></tr></thead><tbody>'+guests+'</tbody></table></div>','s12')+'</div>';
 }
-function toast(message,type='info'){
- const el=document.createElement('div');el.className='toast '+type;el.textContent=message;$('toast-region').append(el);
- setTimeout(()=>el.remove(),3400);
+function staffPage(){
+ const rows=Object.entries(s.staff).map(([id,n])=>'<tr><td><b>'+roles[id].name+'</b></td><td>'+n+'</td><td>'+fmt(roles[id].salary)+'</td><td><button class="mini" data-act="hire" data-id="'+id+'">Tuyển +1</button> <button class="mini" data-act="fire" data-id="'+id+'">Giảm -1</button></td></tr>').join('');
+ return '<div class="grid">'+metric('Tổng nhân sự',Object.values(s.staff).reduce((a,b)=>a+b,0),'Đang làm việc')+metric('Quỹ lương/ngày',fmt(payroll()),'Chi phí nhân sự')+metric('Tinh thần',Math.round(s.morale)+'/100','Ảnh hưởng chất lượng')+metric('An ninh',s.staff.security+' người','Bảo vệ khách và tài sản')+panel('Đội ngũ','Điều chỉnh quy mô theo công suất','<div class="table-wrap"><table><thead><tr><th>BỘ PHẬN</th><th>NHÂN SỰ</th><th>LƯƠNG/THÁNG</th><th>THAO TÁC</th></tr></thead><tbody>'+rows+'</tbody></table></div>','s12')+panel('Chính sách nhân sự','Đầu tư vào sự ổn định dài hạn','<div class="actions"><div class="action-card"><b>Thưởng động viên</b><p>+8 tinh thần, giảm nguy cơ sự cố.</p><button class="btn" data-act="bonus">Chi 15 triệu</button></div><div class="action-card"><b>Đào tạo nghiệp vụ</b><p>+6 chất lượng dịch vụ.</p><button class="btn" data-act="training">Chi 22 triệu</button></div></div>','s12')+'</div>';
 }
-function totalRooms(){return Object.values(state.rooms).reduce((a,b)=>a+b,0)}
-function occupiedRooms(){return state.guests.filter(g=>g.status==='staying').length}
-function occupancy(){return totalRooms()?occupiedRooms()/totalRooms():0}
-function roomRevenue(){return Object.entries(state.rooms).reduce((sum,[type,count])=>sum+count*state.prices[type],0)}
-function staffCount(){return Object.values(state.staff).reduce((a,b)=>a+b,0)}
-function dailyPayroll(){return Object.entries(state.staff).reduce((sum,[role,count])=>sum+roles[role].salary*count/30,0)}
-function facilityUpkeep(){return Object.entries(state.facilities).reduce((sum,[id,active])=>sum+(active?facilities[id].upkeep:0),0)}
-function guestDemand(){
- const season=1+Math.sin((state.day%30)/30*Math.PI*2)*.13;
- const rep=0.65+state.reputation/180;
- const starsFactor=1+(state.stars-2)*.055;
- const marketing=state.marketingUntil>=state.day?1+state.marketing:1;
- const loyalty=1+state.bonuses.loyalty;
- const capacity=totalRooms();
- const averageRate=roomRevenue()/Math.max(1,capacity);
- const averageBase=Object.values(roomTypes).reduce((a,r)=>a+r.base,0)/Object.keys(roomTypes).length;
- const priceFactor=clamp(1.12-(averageRate/averageBase-1)*.42,.5,1.2);
- const eventFactor=state.currentEvent&&state.currentEvent.until>=state.day?(state.currentEvent.demand||1):1;
- return Math.max(0,Math.round((capacity*.11+2)*season*rep*starsFactor*marketing*loyalty*priceFactor*eventFactor));
+function operationsPage(){
+ return '<div class="grid">'+metric('Chất lượng dịch vụ',Math.round(s.quality)+'/100','Đánh giá của khách')+metric('Vệ sinh',Math.round(s.clean)+'/100','Tiêu chuẩn phòng')+metric('Cơ sở vật chất',Math.round(s.condition)+'/100','Bảo trì định kỳ')+metric('Vỏ bọc',Math.round(s.cover)+'/100','Hình ảnh khách sạn','green')+panel('Bảo dưỡng và quy trình','Các hoạt động cải thiện chất lượng','<div class="actions"><div class="action-card"><b>Tổng vệ sinh</b><p>Khôi phục vệ sinh toàn khách sạn.</p><button class="btn" data-act="clean">Chi 8 triệu</button></div><div class="action-card"><b>Bảo trì định kỳ</b><p>Khôi phục cơ sở vật chất.</p><button class="btn" data-act="maintenance">Chi 18 triệu</button></div><div class="action-card"><b>Chuẩn hóa dịch vụ</b><p>Tăng chất lượng và danh tiếng.</p><button class="btn" data-act="service">Chi 20 triệu</button></div><div class="action-card"><b>Kiểm tra nội bộ</b><p>Giảm áp lực điều tra, củng cố hồ sơ.</p><button class="btn" data-act="audit">Chi 12 triệu</button></div></div>','s7')+panel('Chỉ số vận hành','Theo dõi trước khi chúng trở thành khủng hoảng','<div class="meter-list">'+meter('Chất lượng',s.quality)+meter('Vệ sinh',s.clean)+meter('Cơ sở vật chất',s.condition)+meter('Tinh thần',s.morale)+meter('Vỏ bọc',s.cover)+meter('Áp lực điều tra',s.suspicion,'red')+'</div>','s5')+'</div>';
 }
-function addGuest(){
- const free=totalRooms()-occupiedRooms();
- if(free<=0)return;
- const available=Object.entries(state.rooms).filter(([type,count])=>count>state.guests.filter(g=>g.status==='staying'&&g.type===type).length);
- if(!available.length)return;
- const weights=available.map(([type,count])=>Math.max(1,count)*Math.max(1,roomTypes[type].comfort));
- const total=weights.reduce((a,b)=>a+b,0);let roll=Math.random()*total;let chosen=available[0][0];
- for(let i=0;i<available.length;i++){roll-=weights[i];if(roll<=0){chosen=available[i][0];break}}
- const rate=state.prices[chosen];
- const stay=Math.ceil(rand(1,4));
- const satisfaction=clamp(Math.round((state.service+state.bonuses.service)*.45+state.cleanliness*.35+roomTypes[chosen].comfort*.2+rand(-8,8)),20,100);
- state.guests.push({id:state.nextGuestId++,name:pick(['Minh Anh','Hoàng Nam','Gia Hân','Quốc Bảo','Thanh Vy','Tuấn Kiệt','Mai Chi','Khánh Linh','Đức Anh','Bảo Ngọc']),type:chosen,rate,stay,remaining:stay,status:'staying',satisfaction,spent:0});
- state.today.checkins++;state.today.booked++;
- if(state.contract)state.contract.progress++;
- log('Khách mới nhận phòng '+roomTypes[chosen].label+' · '+money(rate)+'/đêm.');
+function underworldPage(){
+ const cards=factions.map(f=>'<article class="contract-card"><span class="tag">RỦI RO '+f.risk+'/100</span><h4>'+f.name+'</h4><p>'+f.desc+'</p><p>Thưởng mô phỏng: '+fmt(65000000+f.risk*1800000)+' · tác động áp lực +'+f.risk+'</p><button class="btn" data-act="deal" data-id="'+f.id+'" '+(s.activeDeal?'disabled':'')+'>Nhận thỏa thuận hư cấu</button></article>').join('');
+ return '<div class="grid">'+metric('Mạng lưới',Math.round(s.network)+'/100','Mức độ ảnh hưởng','gold')+metric('Áp lực điều tra',Math.round(s.suspicion)+'/100','Chỉ số rủi ro',s.suspicion>65?'red':'gold')+metric('Vỏ bọc',Math.round(s.cover)+'/100','Hình ảnh khách sạn','green')+metric('Thỏa thuận',s.activeDeal?'Đang hoạt động':'Không có','Mỗi lựa chọn đều có hệ quả')+panel('Những mối quan hệ kín','Các phe phái và giao kèo chỉ tồn tại trong cốt truyện game','<div class="notice danger">Đây là hệ thống lựa chọn hư cấu phục vụ gameplay, không mô tả hay hướng dẫn hành vi phạm pháp ngoài đời.</div><div class="grid" style="margin-top:12px">'+cards+'</div>','s12')+panel('Kiểm soát rủi ro','Giữ hoạt động kinh doanh hợp pháp đủ vững','<div class="actions"><div class="action-card"><b>Rút khỏi giao kèo</b><p>Chấm dứt thỏa thuận đang mở, mất một phần uy tín mạng lưới.</p><button class="btn danger" data-act="withdraw" '+(!s.activeDeal?'disabled':'')+'>Rút lui</button></div><div class="action-card"><b>Minh bạch hóa hoạt động</b><p>Giảm áp lực điều tra và tăng vỏ bọc kinh doanh.</p><button class="btn" data-act="transparency">Thực hiện · 16 triệu</button></div></div>','s12')+'</div>';
 }
-function updateGuestMinute(){
- for(const g of state.guests.filter(x=>x.status==='staying')){
-  g.spent+=g.rate/DAY_MINUTES;
-  if(state.minute%60===0&&Math.random()<.025){
-   const extra=state.facilities.restaurant?rand(8,28):rand(0,8);
-   state.cash+=extra;state.today.revenue+=extra;state.lifetime.revenue+=extra;g.spent+=extra;
-  }
- }
- state.guests=state.guests.filter(g=>g.status==='staying');
+function financePage(){
+ const hist=s.history.slice(0,8).map(h=>'<tr><td>Ngày '+h.day+'</td><td>'+fmt(h.revenue)+'</td><td>'+fmt(h.cost)+'</td><td class="'+(h.profit>=0?'green':'red')+'">'+fmt(h.profit)+'</td></tr>').join('')||'<tr><td colspan="4">Chưa có báo cáo.</td></tr>';
+ return '<div class="grid">'+metric('Tiền mặt',fmt(s.cash),'Ngân quỹ hiện tại')+metric('Khoản vay',fmt(s.debt),'Lãi suất giả lập 0,08%/ngày')+metric('Doanh thu tích lũy',fmt(s.lifetime.revenue),'Từ ngày bắt đầu')+metric('Ngày đã vận hành',s.lifetime.days,'Ngày hoàn tất')+panel('Quản lý vốn','Đầu tư, trả nợ và bảo toàn dòng tiền','<div class="actions"><div class="action-card"><b>Trả nợ 50 triệu</b><p>Giảm khoản vay và chi phí lãi.</p><button class="btn" data-act="repay">Thanh toán</button></div><div class="action-card"><b>Gọi vốn bổ sung</b><p>Vay thêm 200 triệu, tăng áp lực tài chính.</p><button class="btn" data-act="loan">Vay vốn</button></div><div class="action-card"><b>Mở rộng cơ sở</b><p>Mua thêm một khu nhà phụ với giá 450 triệu.</p><button class="btn" data-act="branch">Mở chi nhánh</button></div></div>','s5')+panel('Báo cáo theo ngày','Lịch sử kết quả kinh doanh','<div class="table-wrap"><table><thead><tr><th>NGÀY</th><th>DOANH THU</th><th>CHI PHÍ</th><th>LỢI NHUẬN</th></tr></thead><tbody>'+hist+'</tbody></table></div>','s7')+'</div>';
 }
-function checkout(g){
- g.status='checked-out';const score=clamp(g.satisfaction+(state.service-65)*.08+(state.cleanliness-80)*.08,1,100);
- state.reputation=clamp(state.reputation+(score>=80?.16:score<55?-.35:.04),5,100);
- state.today.checkouts++;state.lifetime.guests++;log(g.name+' trả phòng · mức hài lòng '+Math.round(score)+'/100.');
+function recordsPage(){
+ return '<div class="grid">'+panel('Khe lưu tiến trình','Lưu nhiều chiến dịch trên cùng thiết bị','<div class="actions">'+[1,2,3].map(n=>'<div class="action-card"><b>Khe lưu '+n+'</b><p id="slot-'+n+'">Chưa có dữ liệu</p><button type="button" class="btn" data-act="slot-save" data-id="'+n+'">Lưu vào khe</button><button type="button" class="btn" data-act="slot-load" data-id="'+n+'">Tải khe lưu</button></div>').join('')+'</div>','s12')+panel('Sao lưu dữ liệu','Xuất file JSON hoặc nhập tiến trình đã lưu','<div class="actions"><div class="action-card"><b>Xuất tiến trình</b><p>Tạo bản sao lưu có thể chuyển sang thiết bị khác.</p><button class="btn" data-act="export">Xuất JSON</button></div><div class="action-card"><b>Nhập tiến trình</b><p>Khôi phục từ file JSON đã xuất.</p><button class="btn" data-act="import">Chọn tệp</button></div><div class="action-card"><b>Bắt đầu chiến dịch mới</b><p>Xóa tiến trình hiện tại trên thiết bị này.</p><button class="btn danger" data-act="reset">Xóa và chơi lại</button></div></div>','s12')+'</div>';
 }
-function operatingCostPerMinute(){
- const rooms=totalRooms();
- const eventFactor=state.currentEvent&&state.currentEvent.until>=state.day?(state.currentEvent.cost||1):1;
- const utilities=(rooms*1.35+occupiedRooms()*1.1)*(1-state.bonuses.green)*eventFactor;
- const maintenance=(100-state.condition)*.035+facilityUpkeep()/1440;
- const wages=dailyPayroll()/1440;
- const lowEnergy=state.energy<25?1.25:1;
- return (utilities*lowEnergy+maintenance+wages)*(1-state.bonuses.automation);
+function pay(amount){if(s.cash<amount){toast('Không đủ tiền mặt.');return false}s.cash-=amount;s.today.cost+=amount;return true}
+function doAction(act,el){
+ const id=el.dataset.id;
+ if(act==='build'){const r=rooms[id];if(!pay(r.cost))return;s.rooms[id]++;s.condition=clamp(s.condition-1);note('Hoàn thành xây dựng: '+r.name+'.');toast('Đã mở rộng khách sạn.')}
+ else if(act==='price'){openPrice(id);return}
+ else if(act==='hire'){if(!pay(roles[id].salary))return;s.staff[id]++;note('Tuyển thêm nhân sự bộ phận '+roles[id].name+'.')}
+ else if(act==='fire'){if(s.staff[id]<=0){toast('Không còn nhân sự để giảm.');return}s.staff[id]--;s.morale=clamp(s.morale-2);note('Điều chỉnh nhân sự: '+roles[id].name+'.')}
+ else if(act==='bonus'){if(!pay(15000000))return;s.morale=clamp(s.morale+8);note('Đã chi thưởng động viên nhân viên.')}
+ else if(act==='training'){if(!pay(22000000))return;s.quality=clamp(s.quality+6);note('Đào tạo nghiệp vụ hoàn tất.')}
+ else if(act==='marketing'){if(!pay(25000000))return;s.rep=clamp(s.rep+3);s.cover=clamp(s.cover+4);note('Chiến dịch quảng bá tăng nhận diện khách sạn.')}
+ else if(act==='maintenance'){if(!pay(18000000))return;s.condition=clamp(s.condition+18);note('Đã bảo trì cơ sở vật chất.')}
+ else if(act==='audit'){if(!pay(12000000))return;s.suspicion=clamp(s.suspicion-9);s.cover=clamp(s.cover+5);note('Kiểm tra nội bộ giúp hồ sơ vận hành rõ ràng hơn.')}
+ else if(act==='clean'){if(!pay(8000000))return;s.clean=clamp(s.clean+18);note('Hoàn tất tổng vệ sinh.')}
+ else if(act==='service'){if(!pay(20000000))return;s.quality=clamp(s.quality+9);s.rep=clamp(s.rep+1);note('Nâng cấp quy trình phục vụ.')}
+ else if(act==='pricing'){openPrice('standard');return}
+ else if(act==='deal'){if(s.activeDeal){toast('Đang có thỏa thuận chưa kết thúc.');return}const f=factions.find(x=>x.id===id);s.activeDeal={id:f.id,name:f.name,left:3,reward:65000000+f.risk*1800000,risk:f.risk};s.network=clamp(s.network+8);s.suspicion=clamp(s.suspicion+f.risk);note('Cốt truyện: nhận lời đề nghị từ '+f.name+'.','warning');toast('Một lựa chọn mới đã mở.')}
+ else if(act==='withdraw'){if(!s.activeDeal)return;s.activeDeal=null;s.network=clamp(s.network-5);s.suspicion=clamp(s.suspicion-4);note('Đã rút khỏi thỏa thuận.','warning')}
+ else if(act==='transparency'){if(!pay(16000000))return;s.suspicion=clamp(s.suspicion-12);s.cover=clamp(s.cover+10);note('Tăng cường minh bạch và chuẩn hóa hoạt động.')}
+ else if(act==='repay'){const n=Math.min(50000000,s.debt);if(!pay(n))return;s.debt-=n;note('Đã thanh toán '+fmt(n)+' tiền gốc.')}
+ else if(act==='loan'){s.cash+=200000000;s.debt+=200000000;s.suspicion=clamp(s.suspicion+2);note('Nhận khoản vay mới 200 triệu.','warning')}
+ else if(act==='branch'){if(!pay(450000000))return;s.rooms.standard+=6;s.rooms.deluxe+=2;s.rep=clamp(s.rep+2);note('Mở khu lưu trú phụ: thêm 8 phòng.','success')}
+ else if(act==='slot-save'){localStorage.setItem(KEY+'-slot-'+id,JSON.stringify(s));toast('Đã lưu vào khe '+id+'.')}
+ else if(act==='slot-load'){const raw=localStorage.getItem(KEY+'-slot-'+id);if(!raw){toast('Khe lưu đang trống.');return}s=JSON.parse(raw);note('Đã tải khe lưu '+id+'.')}
+ else if(act==='export'){const blob=new Blob([JSON.stringify(s,null,2)],{type:'application/json'});const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='hotel-underworld-save.json';a.click();URL.revokeObjectURL(a.href);toast('Đã xuất bản sao lưu.')}
+ else if(act==='import'){$('import-file').click();return}
+ else if(act==='reset'){if(!confirm('Xóa tiến trình hiện tại và bắt đầu chiến dịch mới?'))return;localStorage.removeItem(KEY);s=fresh();note('Chiến dịch mới bắt đầu.')}
+ render();save();
 }
-function simulateMinute(){
- if(state.minute>=480+DAY_MINUTES){closeDay(true);return}
- state.minute++;
- const demand=guestDemand()/DAY_MINUTES;
- if(Math.random()<demand*.55)addGuest();
- updateGuestMinute();
- const occ=occupancy();
- const income=state.guests.filter(g=>g.status==='staying').reduce((a,g)=>a+g.rate*(1+state.bonuses.yield)/DAY_MINUTES,0);
- state.cash+=income;state.today.revenue+=income;state.lifetime.revenue+=income;
- const cost=operatingCostPerMinute();state.cash-=cost;state.today.expenses+=cost;
- if(state.minute%60===0){
-  state.energy=clamp(state.energy-(2+occ*3),8,100);
-  state.cleanliness=clamp(state.cleanliness-(occ*2.1)+state.staff.housekeeping*.42,15,100);
-  state.condition=clamp(state.condition-.25+(state.staff.maintenance*.08),15,100);
-  state.morale=clamp(state.morale-.12+(state.staff.manager*.06),15,100);
- }
- if(state.minute%60===0){if(Math.random()<.18)createBooking();processBookings();state.service=clamp(state.service+(state.staff.reception*.025+state.staff.kitchen*.012-1.0)*.018,20,100);if(state.stock<20)state.service=clamp(state.service-.025,0,100)}
- if(state.minute%180===0)maybeEvent();
- if(state.minute>=480+DAY_MINUTES)closeDay(true);
+function openPrice(id){
+ const r=rooms[id];$('modal-body').innerHTML='<h2>Điều chỉnh giá phòng</h2><p>'+r.name+' · giá hiện tại '+fmt(s.prices[id])+'</p><label class="field">Giá mới mỗi đêm<input id="new-price" type="number" min="100000" max="30000000" step="50000" value="'+s.prices[id]+'"></label><div class="modal-actions"><button type="button" class="btn primary" id="apply-price">Áp dụng</button><button type="button" class="btn" id="cancel-price">Hủy</button></div>';$('modal').showModal();$('cancel-price').onclick=()=>$('modal').close();$('apply-price').onclick=()=>{const v=Number($('new-price').value);if(v<100000||v>30000000){toast('Giá phòng không hợp lệ.');return}s.prices[id]=v;note('Điều chỉnh giá '+r.name+' thành '+fmt(v)+'.');$('modal').close();render();save()};
+}
+function newGuest(){
+ if(freeRooms()<=0)return;
+ const ids=Object.keys(s.rooms).filter(id=>s.rooms[id]>s.guests.filter(g=>g.type===id).length);
+ if(!ids.length)return;
+ const id=pick(ids),names=['An Nhiên','Minh Khang','Bảo Trâm','Quốc Huy','Hà My','Gia Bảo','Khánh An','Tuệ Lâm','Đình Phong','Mai Phương'];
+ const guest={id:s.nextGuest++,name:pick(names),type:id,rate:s.prices[id],nights:1+Math.floor(Math.random()*3)};
+ s.guests.push(guest);s.today.arrivals++;note('Khách '+guest.name+' nhận phòng '+rooms[id].name+'.');
 }
 function maybeEvent(){
- if(Math.random()>.48)return;
- const event=pick(events);
- state.log.unshift({day:state.day,minute:state.minute,text:'SỰ KIỆN: '+event.title+' — '+event.text,type:'event'});
- state.currentEvent={...event,until:state.day+1};
- if(event.rep)state.reputation=clamp(state.reputation+event.rep,0,100);
- if(event.expense){state.cash-=event.expense;state.today.expenses+=event.expense}
+ if(Math.random()>.42)return;
+ const events=[
+ {title:'Đánh giá tích cực',text:'Một vị khách để lại nhận xét tốt.',run:()=>{s.rep=clamp(s.rep+2);s.quality=clamp(s.quality+1)}},
+ {title:'Đêm mưa lớn',text:'Chi phí bảo trì tăng nhẹ.',run:()=>{s.condition=clamp(s.condition-4);s.today.cost+=4500000;s.cash-=4500000}},
+ {title:'Khách đoàn bất ngờ',text:'Nhu cầu lưu trú tăng trong ngày.',run:()=>{newGuest();newGuest()}},
+ {title:'Tin đồn trên mạng',text:'Khách sạn bị chú ý nhiều hơn.',run:()=>{s.suspicion=clamp(s.suspicion+5);s.rep=clamp(s.rep-1)}},
+ {title:'Nhân viên xuất sắc',text:'Tinh thần đội ngũ được cải thiện.',run:()=>{s.morale=clamp(s.morale+4)}}
+ ];
+ const e=pick(events);e.run();s.event={title:e.title,text:e.text};note('SỰ KIỆN: '+e.title+' — '+e.text,'event');
 }
-function closeDay(automatic=false){
- const occ=occupancy()*100;
- for(const guest of [...state.guests]){guest.remaining--;if(guest.remaining<=0)checkout(guest)}
- state.guests=state.guests.filter(g=>g.status==='staying');
- if(state.debt>0){const interest=state.debt*.0008;state.cash-=interest;state.today.expenses+=interest;log('Lãi vay trong ngày: '+money(interest)+'.')}
- const revenue=state.today.revenue,expenses=state.today.expenses;
- const profit=revenue-expenses;
- state.history.unshift({day:state.day,revenue,expenses,profit,occupancy:occ,guests:state.today.checkins});
- state.history=state.history.slice(0,30);
- state.lifetime.days++;state.lifetime.profit+=profit;
- state.experience+=Math.max(1,Math.floor(state.today.checkins/2)+Math.max(0,Math.floor(profit/1000)));
- if(state.experience>=state.level*120){state.experience-=state.level*120;state.level++;state.stars=clamp(2+Math.floor((state.level-1)/3),2,5);log('Thăng hạng khách sạn! Mở cấp '+state.level+'.')}
- if(state.contract&&state.contract.due<=state.day){if(state.contract.progress>=state.contract.target){state.cash+=state.contract.reward;state.reputation=clamp(state.reputation+3,0,100);log('Hoàn thành hợp đồng doanh nghiệp: +'+money(state.contract.reward),'success')}else{state.reputation=clamp(state.reputation-4,0,100);log('Không đạt chỉ tiêu hợp đồng.','warning')}state.contract=null}
- state.day++;state.minute=480;state.today={revenue:0,expenses:0,checkins:0,checkouts:0,complaints:0,booked:0};
- state.cleanliness=clamp(state.cleanliness+state.staff.housekeeping*2.2,0,100);
- state.energy=clamp(state.energy+12,0,100);
- state.condition=clamp(state.condition+state.staff.maintenance*.7,0,100);
- state.stock=clamp(state.stock+15,0,100);
- state.morale=clamp(state.morale+1,0,100);
- log('Đã chốt ngày '+(state.day-1)+'. Lợi nhuận: '+money(profit)+'. Công suất cuối ngày: '+Math.round(occ)+'%.');
- saveState(true);
- if(!automatic)toast('Đã chuyển sang ngày '+state.day+'.','success');
- render();
+function closeDay(){
+ const guests=[...s.guests],occ=occupancy();let revenue=0,remaining=[];
+ for(const g of guests){revenue+=g.rate;s.lifetime.guests++;g.nights--;if(g.nights>0)remaining.push(g)}
+ const variable=totalRooms()*240000+occupied()*90000,staffCost=payroll(),interest=s.debt*.0008,baseCost=variable+staffCost+interest,net=revenue-baseCost;
+ s.cash+=revenue-baseCost;s.today.revenue+=revenue;s.today.cost+=baseCost;s.lifetime.revenue+=revenue;
+ s.history.unshift({day:s.day,revenue,cost:baseCost,profit:net});s.history=s.history.slice(0,30);s.lifetime.days++;s.guests=remaining;
+ if(s.activeDeal){s.activeDeal.left--;if(s.activeDeal.left<=0){s.cash+=s.activeDeal.reward;s.today.revenue+=s.activeDeal.reward;s.lifetime.revenue+=s.activeDeal.reward;s.rep=clamp(s.rep+2);note('Kết thúc thỏa thuận trong cốt truyện: nhận '+fmt(s.activeDeal.reward)+'.','event');s.activeDeal=null}}
+ if(s.suspicion>=100){s.ending='Khách sạn bị đóng cửa trong cốt truyện';note('KẾT THÚC: áp lực điều tra vượt ngưỡng.','bad')}
+ if(s.cash<0){s.ending='Phá sản';note('KẾT THÚC: khách sạn mất khả năng thanh toán.','bad')}
+ s.day++;s.hour=8;s.today={revenue:0,cost:0,arrivals:0};
+ s.clean=clamp(s.clean+7+s.staff.housekeeping*1.2);s.condition=clamp(s.condition+s.staff.security*.2-1);s.morale=clamp(s.morale-1.5+s.staff.manager*.7);s.suspicion=clamp(s.suspicion-1.5+(s.activeDeal?0.5:0));
+ if(Math.random()<.45)maybeEvent();
+ if(!s.ending)for(let i=0;i<Math.min(guestDemand(),freeRooms());i++)newGuest();
+ note('Đã kết sổ ngày '+(s.day-1)+'. Lợi nhuận: '+fmt(net)+'. Công suất: '+Math.round(occ*100)+'%.');
+ if(s.rep>=95&&s.cash>=10000000000&&s.suspicion<25)s.ending='Đế chế khách sạn chính thống';
+ save();render();if(s.ending)toast('Chiến dịch đã kết thúc: '+s.ending);
 }
-function applyOffline(){
- const elapsed=clamp(Date.now()-(state.lastSave||Date.now()),0,MAX_OFFLINE_MS);
- const minutes=Math.floor(elapsed/1000*state.speed*5);
- if(minutes<=0)return;
- const capped=Math.min(minutes,DAY_MINUTES*3);
- let earned=0,offlineRevenue=0,offlineCosts=0,dayRevenue=0,dayCosts=0;
- for(let i=0;i<capped;i++){
-  const occ=occupancy();const rev=state.guests.reduce((a,g)=>a+g.rate*(1+state.bonuses.yield)/DAY_MINUTES,0);
-  const cost=operatingCostPerMinute();earned+=rev-cost;offlineRevenue+=rev;offlineCosts+=cost;dayRevenue+=rev;dayCosts+=cost;
-  state.minute++;
-  if(state.minute>=480+DAY_MINUTES){
-   for(const guest of [...state.guests]){guest.remaining--;if(guest.remaining<=0)checkout(guest)}
-   state.guests=state.guests.filter(g=>g.status==='staying');
-   state.history.unshift({day:state.day,revenue:dayRevenue,expenses:dayCosts,profit:dayRevenue-dayCosts,occupancy:occ*100,guests:0});state.history=state.history.slice(0,30);
-   state.lifetime.days++;dayRevenue=0;dayCosts=0;state.day++;state.minute=480;state.today={revenue:0,expenses:0,checkins:0,checkouts:0,complaints:0,booked:0};
-  }
-  if(i%60===0){state.cleanliness=clamp(state.cleanliness-.5+state.staff.housekeeping*.12,0,100);state.condition=clamp(state.condition-.15+state.staff.maintenance*.04,0,100)}
- }
- state.cash+=earned;state.today.revenue+=offlineRevenue;state.today.expenses+=offlineCosts;state.lifetime.revenue+=offlineRevenue;state.lifetime.profit+=earned;state.lastSave=Date.now();
- if(capped>0)state.log.unshift({day:state.day,minute:state.minute,text:'Mô phỏng offline '+number(capped)+' phút · '+(earned>=0?'+':'')+money(earned)+'.',type:'info'});
-}
-function fmtTime(minute){const m=minute%1440;return String(Math.floor(m/60)).padStart(2,'0')+':'+String(m%60).padStart(2,'0')}
-function bar(label,value,color=''){return '<div class="stat-row"><span>'+label+'</span><div class="bar"><i class="'+color+'" style="width:'+clamp(value,0,100)+'%"></i></div><strong>'+Math.round(value)+'%</strong></div>'}
-function metric(label,value,note='',tone=''){return '<div class="metric-card"><div class="metric-label">'+label+'</div><div class="metric-value '+tone+'">'+value+'</div><div class="metric-note">'+note+'</div></div>'}
-function panel(title,subtitle,body,span='span-6'){return '<section class="panel '+span+'"><div class="section-head"><div><h3>'+title+'</h3><div class="panel-subtitle">'+subtitle+'</div></div></div>'+body+'</section>'}
-function renderOverview(){
- const occ=occupiedRooms(),rooms=totalRooms(),rev=state.today.revenue,profit=rev-state.today.expenses;
- const trend=state.history.slice(0,7).reverse();const max=Math.max(1,...trend.map(x=>Math.abs(x.profit)));
- const chart=trend.length?'<div class="chart">'+trend.map(x=>'<div class="chart-col"><i style="height:'+Math.max(3,Math.abs(x.profit)/max*85)+'%"></i><small>D'+x.day+'</small></div>').join('')+'</div>':'<div class="empty-state">Báo cáo sẽ xuất hiện sau ngày đầu tiên.</div>';
- const logs=state.log.slice(0,7).map(x=>'<div class="log-item"><time>D'+x.day+' '+fmtTime(x.minute)+'</time><p>'+escapeHTML(x.text)+'</p></div>').join('')||'<div class="empty-state">Chưa có hoạt động.</div>';
- return '<div class="dashboard-grid">'+
- metric('Doanh thu hôm nay',money(rev),'Doanh thu tích lũy trong ngày','positive')+
- metric('Lợi nhuận tạm tính',(profit<0?'−':'')+money(Math.abs(profit)),'Sau chi phí vận hành',profit>=0?'positive':'negative')+
- metric('Công suất phòng',Math.round(occupancy()*100)+'%',occ+' / '+rooms+' phòng đang sử dụng','accent')+
- metric('Danh tiếng',Math.round(state.reputation)+'/100','Hạng '+state.stars+' sao','gold')+
- panel('Hiệu suất vận hành','Chỉ số ảnh hưởng trực tiếp tới trải nghiệm khách', '<div class="stat-list">'+bar('Chất lượng dịch vụ',state.service)+bar('Vệ sinh',state.cleanliness,'blue')+bar('Tình trạng cơ sở',state.condition,'gold')+bar('Năng lượng',state.energy,'gold')+bar('Tinh thần nhân viên',state.morale,'blue')+'</div>','span-5')+
- panel('Dòng tiền 7 ngày','Lợi nhuận sau chi phí theo ngày',chart,'span-7')+
- panel('Hoạt động gần đây','Nhật ký vận hành theo thời gian', '<div class="log-list">'+logs+'</div>','span-7')+
- panel('Quyết định nhanh','Các hành động thường dùng', '<div class="action-grid"><div class="action-card"><strong>Chiến dịch marketing</strong><p>Thu hút thêm khách trong 3 ngày.</p><button class="button button-secondary" data-action="marketing">Chạy chiến dịch</button></div><div class="action-card"><strong>Bảo trì tổng thể</strong><p>Khôi phục tình trạng cơ sở vật chất.</p><button class="button button-secondary" data-action="maintenance">Bảo trì ngay</button></div><div class="action-card"><strong>Điều chỉnh giá</strong><p>Tối ưu doanh thu theo nhu cầu.</p><button class="button button-secondary" data-action="pricing">Định giá phòng</button></div><div class="action-card"><strong>Nhận hợp đồng</strong><p>Nhận đoàn khách doanh nghiệp.</p><button class="button button-secondary" data-action="contract">Tìm hợp đồng</button></div></div>','span-5')+
- '</div>';
-}
-function renderRooms(){
- const rows=Object.entries(state.rooms).map(([type,count])=>{
-  const staying=state.guests.filter(g=>g.type===type).length;
-  const r=roomTypes[type];
-  return '<tr><td><strong>'+r.label+'</strong><div class="muted">'+r.capacity+' khách/phòng · tiện nghi '+r.comfort+'/100</div></td><td>'+count+'</td><td>'+staying+'</td><td>'+money(state.prices[type])+'</td><td><button class="mini-button" data-action="price" data-type="'+type+'">Đổi giá</button> <button class="mini-button" data-action="build-room" data-type="'+type+'">Mở rộng</button></td></tr>'
- }).join('');
- const bookingRows=state.bookings.slice(0,12).map(b=>'<tr><td>#'+b.id+' · '+escapeHTML(b.name)+'</td><td>'+roomTypes[b.type].label+'</td><td>'+fmtTime(480+(b.arrivalAt%DAY_MINUTES))+'</td><td>'+money(b.rate)+'</td><td><span class="tag '+(b.status==='confirmed'?'warn':b.status==='checked-in'?'good':'bad')+'">'+(b.status==='confirmed'?'Đã xác nhận':b.status==='checked-in'?'Đã nhận phòng':'Đã hủy')+'</span></td></tr>').join('');
- const guestRows=state.guests.slice(0,12).map(g=>'<tr><td>#'+g.id+' · '+escapeHTML(g.name)+'</td><td>'+roomTypes[g.type].label+'</td><td>'+g.remaining+' đêm</td><td>'+money(g.rate)+'</td><td><span class="tag good">Đang lưu trú</span></td></tr>').join('');
- return '<div class="dashboard-grid">'+
- metric('Tổng số phòng',number(totalRooms()),'Sức chứa toàn khách sạn')+
- metric('Đang có khách',number(occupiedRooms()),'Phòng đang được sử dụng','accent')+
- metric('Phòng trống',number(totalRooms()-occupiedRooms()),'Có thể nhận khách','positive')+
- metric('Giá phòng bình quân',money(roomRevenue()/Math.max(1,totalRooms())),'Giá niêm yết trung bình')+
- panel('Danh mục phòng','Quản lý giá, số lượng và sức chứa','<div class="table-wrap"><table><thead><tr><th>LOẠI PHÒNG</th><th>TỔNG</th><th>ĐANG Ở</th><th>GIÁ/ĐÊM</th><th>THAO TÁC</th></tr></thead><tbody>'+rows+'</tbody></table></div>','span-12')+
- panel('Đặt phòng','Theo dõi yêu cầu, thời gian đến và trạng thái đặt chỗ','<div class="table-wrap"><table><thead><tr><th>MÃ / KHÁCH</th><th>LOẠI PHÒNG</th><th>GIỜ ĐẾN</th><th>GIÁ/ĐÊM</th><th>TRẠNG THÁI</th></tr></thead><tbody>'+bookingRows+'</tbody></table></div>','span-12')+
- panel('Khách đang lưu trú','Theo dõi khách hiện tại và thời gian trả phòng','<div class="table-wrap"><table><thead><tr><th>KHÁCH</th><th>LOẠI PHÒNG</th><th>CÒN LẠI</th><th>GIÁ/ĐÊM</th><th>TRẠNG THÁI</th></tr></thead><tbody>'+guestRows+'</tbody></table></div>','span-12')+
- '</div>';
-}
-function renderOperations(){
- const fac=Object.entries(facilities).map(([id,f])=>{
-  const active=state.facilities[id];
-  return '<div class="action-card"><div class="row-between"><strong>'+f.name+'</strong><span class="tag '+(active?'good':'warn')+'">'+(active?'Đang hoạt động':'Chưa xây dựng')+'</span></div><p>'+f.desc+'</p><p class="muted">Đầu tư '+money(f.cost)+' · Duy trì '+money(f.upkeep)+'/ngày</p><button class="button button-secondary" data-action="facility" data-id="'+id+'" '+(active?'disabled':'')+'>'+(active?'Đã mở': 'Đầu tư cơ sở')+'</button></div>'
- }).join('');
- return '<div class="dashboard-grid">'+
- metric('Chất lượng dịch vụ',Math.round(state.service)+'/100','Năng lực phục vụ')+
- metric('Vệ sinh',Math.round(state.cleanliness)+'/100','Phụ thuộc đội buồng phòng')+
- metric('Tình trạng',Math.round(state.condition)+'/100','Cần bảo trì định kỳ')+
- metric('Năng lượng',Math.round(state.energy)+'/100','Tác động chi phí điện')+
- panel('Kiểm soát vận hành','Chủ động duy trì chất lượng', '<div class="action-grid"><div class="action-card"><strong>Bảo trì cơ sở</strong><p>Chi phí $2,500 · +22 điểm tình trạng.</p><button class="button button-secondary" data-action="maintenance">Bảo trì</button></div><div class="action-card"><strong>Đào tạo dịch vụ</strong><p>Chi phí $1,800 · +8 điểm dịch vụ.</p><button class="button button-secondary" data-action="training">Đào tạo</button></div><div class="action-card"><strong>Tiếp tế kho</strong><p>Chi phí $900 · khôi phục vật tư.</p><button class="button button-secondary" data-action="stock">Nhập vật tư</button></div><div class="action-card"><strong>Tiết kiệm năng lượng</strong><p>Chi phí $1,200 · +18 điểm năng lượng.</p><button class="button button-secondary" data-action="energy">Tối ưu điện</button></div></div>','span-6')+
- panel('Cơ sở dịch vụ','Đầu tư tiện ích để tăng doanh thu và sức hút','<div class="action-grid">'+fac+'</div>','span-6')+
- '</div>';
-}
-function renderStaff(){
- const rows=Object.entries(roles).map(([id,r])=>{
-  const count=state.staff[id];
-  return '<tr><td><strong>'+r.name+'</strong><div class="muted">'+money(r.salary)+'/người/tháng</div></td><td>'+count+'</td><td>'+money(r.salary*count/30)+'/ngày</td><td><button class="mini-button" data-action="hire" data-role="'+id+'">Tuyển</button> <button class="mini-button" data-action="fire" data-role="'+id+'" '+(count<=0?'disabled':'')+'>Giảm</button></td></tr>'
- }).join('');
- return '<div class="dashboard-grid">'+
- metric('Tổng nhân sự',number(staffCount()),'Trên toàn khách sạn')+
- metric('Quỹ lương/ngày',money(dailyPayroll()),'Phân bổ theo ngày')+
- metric('Tinh thần',Math.round(state.morale)+'/100','Ảnh hưởng năng suất','gold')+
- metric('Năng lực quản lý',state.staff.manager,'Quản lý đang làm việc')+
- panel('Biên chế nhân sự','Tuyển dụng hoặc điều chỉnh số lượng nhân viên','<div class="table-wrap"><table><thead><tr><th>BỘ PHẬN</th><th>NHÂN SỰ</th><th>CHI PHÍ ƯỚC TÍNH</th><th>THAO TÁC</th></tr></thead><tbody>'+rows+'</tbody></table></div>','span-12')+
- panel('Chính sách nhân sự','Các quyết định tác động đến hiệu suất', '<div class="action-grid"><div class="action-card"><strong>Thưởng hiệu suất</strong><p>Chi $1,500 để tăng tinh thần nhân viên.</p><button class="button button-secondary" data-action="bonus">Chi thưởng</button></div><div class="action-card"><strong>Đào tạo toàn bộ</strong><p>Chi $2,800 để tăng dịch vụ và năng suất.</p><button class="button button-secondary" data-action="staff-training">Tổ chức đào tạo</button></div></div>','span-12')+
- '</div>';
-}
-function renderMarket(){
- const demand=guestDemand();
- const facilitiesCount=Object.values(state.facilities).filter(Boolean).length;
- const priceIndex=clamp(100+(state.reputation-60)*.6+(state.stars-2)*7,70,145);
- return '<div class="dashboard-grid">'+
- metric('Nhu cầu dự kiến',number(demand)+' khách/ngày','Ước tính theo danh tiếng và mùa')+
- metric('Chỉ số giá thị trường',Math.round(priceIndex),'100 = mức trung bình','gold')+
- metric('Cạnh tranh',state.stars>=4?'Cao':'Trung bình','Dựa trên cấp độ khách sạn')+
- metric('Tiện ích đang mở',facilitiesCount+'/5','Tăng sức cạnh tranh')+
- panel('Chiến lược thương mại','Quảng bá thương hiệu và tối ưu công suất','<div class="action-grid"><div class="action-card"><strong>Quảng cáo địa phương</strong><p>$2,000 · tăng nhu cầu 15% trong 3 ngày.</p><button class="button button-secondary" data-action="campaign" data-kind="local">Chạy quảng cáo</button></div><div class="action-card"><strong>Chiến dịch cao cấp</strong><p>$5,500 · tăng nhu cầu 32% trong 4 ngày.</p><button class="button button-secondary" data-action="campaign" data-kind="premium">Triển khai</button></div><div class="action-card"><strong>Điều chỉnh giá linh hoạt</strong><p>Giá cao tăng biên lợi nhuận nhưng có thể giảm nhu cầu.</p><button class="button button-secondary" data-action="pricing">Quản lý giá</button></div><div class="action-card"><strong>Hợp đồng doanh nghiệp</strong><p>Cam kết phục vụ đoàn khách để nhận thưởng.</p><button class="button button-secondary" data-action="contract">Tìm hợp đồng</button></div></div>','span-7')+
- panel('Chỉ số thị trường','Các yếu tố đang tác động đến khách sạn','<div class="stat-list">'+bar('Danh tiếng',state.reputation)+bar('Chất lượng dịch vụ',state.service,'blue')+bar('Tiện nghi',Math.min(100,facilitiesCount*20+20),'gold')+bar('Giá cạnh tranh',priceIndex,'blue')+'</div><div class="inline-note">Nhu cầu thay đổi theo mùa, danh tiếng, hạng sao, marketing và chương trình khách hàng thân thiết.</div>','span-5')+
- '</div>';
-}
-function renderFinance(){
- const assets=state.cash+totalRooms()*9000+Object.entries(state.facilities).filter(([,v])=>v).reduce((a,[id])=>a+facilities[id].cost*.6,0);
- const net=assets-state.debt;
- const rows=state.history.slice(0,10).map(x=>'<tr><td>Ngày '+x.day+'</td><td>'+money(x.revenue)+'</td><td>'+money(x.expenses)+'</td><td class="'+(x.profit>=0?'positive':'negative')+'">'+money(x.profit)+'</td><td>'+Math.round(x.occupancy)+'%</td></tr>').join('');
- return '<div class="dashboard-grid">'+
- metric('Tiền mặt',money(state.cash),'Số dư khả dụng',state.cash>=0?'positive':'negative')+
- metric('Khoản vay',money(state.debt),'Dư nợ hiện tại','gold')+
- metric('Giá trị tài sản ròng',money(net),'Ước tính tài sản trừ nợ')+
- metric('Lợi nhuận trọn đời',money(state.lifetime.profit),'Tổng lợi nhuận ghi nhận',state.lifetime.profit>=0?'positive':'negative')+
- panel('Quản lý vốn','Vay vốn hoặc trả nợ để điều tiết dòng tiền','<div class="action-grid"><div class="action-card"><strong>Vay vốn mở rộng</strong><p>Vay $10,000 · lãi suất 0.08%/ngày.</p><button class="button button-secondary" data-action="loan">Vay $10,000</button></div><div class="action-card"><strong>Trả nợ</strong><p>Thanh toán $5,000 dư nợ gốc.</p><button class="button button-secondary" data-action="repay" '+(state.debt<=0?'disabled':'')+'>Trả $5,000</button></div></div><div class="notice info" style="margin-top:12px">Lãi vay được tính khi chốt ngày. Hãy duy trì dòng tiền dương để tránh mất khả năng thanh toán.</div>','span-5')+
- panel('Báo cáo kết quả kinh doanh','Tổng hợp các ngày đã chốt','<div class="table-wrap"><table><thead><tr><th>KỲ</th><th>DOANH THU</th><th>CHI PHÍ</th><th>LỢI NHUẬN</th><th>CÔNG SUẤT</th></tr></thead><tbody>'+rows+'</tbody></table></div>','span-7')+
- '</div>';
-}
-function renderResearch(){
- const cards=research.map(r=>{
-  const done=state.researched.includes(r.id);
-  return '<div class="action-card"><div class="row-between"><strong>'+r.name+'</strong><span class="tag '+(done?'good':'warn')+'">'+(done?'Đã nghiên cứu':'Chưa mở khóa')+'</span></div><p>'+r.desc+'</p><p class="muted">Ngân sách: '+money(r.cost)+'</p><button class="button button-secondary" data-action="research" data-id="'+r.id+'" '+(done?'disabled':'')+'>'+(done?'Hoàn tất':'Đầu tư nghiên cứu')+'</button></div>'
- }).join('');
- const unlocks='<div class="stat-list">'+bar('Revenue Management',state.bonuses.yield*100,'gold')+bar('Service Excellence',state.bonuses.service,'blue')+bar('Smart Operations',state.bonuses.automation*100,'gold')+bar('Loyalty Program',state.bonuses.loyalty*100)+bar('Green Hotel',state.bonuses.green*100,'blue')+'</div>';
- return '<div class="dashboard-grid">'+
- metric('Cấp độ công ty',state.level,'Kinh nghiệm '+number(state.experience))+
- metric('Hạng khách sạn',state.stars+' sao','Tăng theo cấp độ')+
- metric('Nghiên cứu hoàn tất',state.researched.length+'/'+research.length,'Năng lực cạnh tranh')+
- metric('Tài sản phòng',number(totalRooms()),'Tổng phòng đang sở hữu')+
- metric('Chuỗi khách sạn',number(state.branches||1)+' cơ sở','Mạng lưới đang vận hành')+
- panel('Danh mục nghiên cứu','Đầu tư để cải thiện hiệu quả dài hạn','<div class="action-grid">'+cards+'</div>','span-7')+
- panel('Công nghệ đã sở hữu','Các chỉ số cộng thêm từ nghiên cứu',unlocks,'span-5')+
- panel('Mở rộng tập đoàn','Mỗi chi nhánh bổ sung 10 phòng Standard, 4 phòng Deluxe và tăng chi phí vận hành.', '<div class="kpi-strip"><div><small>CHI NHÁNH</small><b>'+(state.branches||1)+'</b></div><div><small>PHÒNG TOÀN HỆ THỐNG</small><b>'+totalRooms()+'</b></div><div><small>CHI PHÍ ĐẦU TƯ</small><b>$85,000</b></div><div><small>CHI PHÍ DUY TRÌ</small><b>$350/ngày</b></div></div><div class="action-card" style="margin-top:12px"><strong>Mở khách sạn mới</strong><p>Thành lập một cơ sở mới trong chuỗi, tăng quy mô và khả năng phục vụ thị trường.</p><button class="button button-primary" data-action="branch" '+(state.cash<85000?'disabled':'')+'>Đầu tư chi nhánh · $85,000</button></div><div class="inline-note">Chi nhánh mới được gộp vào hệ thống quản lý chung trong phiên bản hiện tại.</div>','span-12')+
- '</div>';
-}
-function render(){
- const titles={overview:['BẢNG ĐIỀU KHIỂN','Tổng quan khách sạn','Theo dõi hoạt động và đưa ra quyết định điều hành.'],rooms:['QUẢN LÝ TÀI SẢN','Phòng & đặt chỗ','Kiểm soát sức chứa, giá phòng và trải nghiệm lưu trú.'],operations:['VẬN HÀNH','Vận hành khách sạn','Duy trì chất lượng dịch vụ và hiệu suất cơ sở.'],staff:['QUẢN TRỊ NHÂN SỰ','Nhân sự','Tuyển dụng, phân bổ và phát triển đội ngũ.'],market:['THƯƠNG MẠI','Thị trường','Điều chỉnh chiến lược giá và nhu cầu khách hàng.'],finance:['TÀI CHÍNH','Tài chính','Theo dõi dòng tiền, khoản vay và hiệu quả kinh doanh.'],research:['PHÁT TRIỂN','Nghiên cứu & mở rộng','Đầu tư năng lực dài hạn cho tập đoàn khách sạn.']};
- const t=titles[currentTab];$('page-kicker').textContent=t[0];$('page-title').textContent=t[1];$('page-subtitle').textContent=t[2];
- document.querySelectorAll('.nav-item').forEach(b=>b.classList.toggle('active',b.dataset.tab===currentTab));
- const renderers={overview:renderOverview,rooms:renderRooms,operations:renderOperations,staff:renderStaff,market:renderMarket,finance:renderFinance,research:renderResearch};
- $('tab-content').innerHTML=renderers[currentTab]();
- $('top-cash').textContent=money(state.cash);$('top-day').textContent=String(state.day).padStart(2,'0');$('top-clock').textContent=fmtTime(state.minute);
- $('hotel-name').textContent=state.hotelName;$('hotel-stars').textContent='★'.repeat(state.stars)+'☆'.repeat(5-state.stars);$('sidebar-reputation').textContent=Math.round(state.reputation)+'/100';$('sidebar-reputation-bar').style.width=state.reputation+'%';
- $('simulation-status').textContent=state.paused?'Mô phỏng đang tạm dừng':'Mô phỏng đang chạy';
- $('pause-btn').textContent=state.paused?'Tiếp tục':'Tạm dừng';$('speed-btn').textContent='Tốc độ: '+state.speed+'×';
-}
-function canSpend(amount){if(state.cash<amount){toast('Không đủ tiền mặt cho quyết định này.','error');return false}return true}
-function spend(amount,reason){state.cash-=amount;state.today.expenses+=amount;log(reason+' · −'+money(amount)+'.')}
-function openModal(title,body,buttons=''){
- $('modal-content').innerHTML='<h2>'+title+'</h2>'+body+(buttons?'<div class="modal-actions">'+buttons+'</div>':'');
- $('modal').showModal();
-}
-function showPriceModal(type){
- const r=roomTypes[type];
- openModal('Điều chỉnh giá '+r.label,'<p>Giá hiện tại: '+money(state.prices[type])+' mỗi đêm. Giá cao có thể giảm nhu cầu nếu vượt quá mức thị trường.</p><label class="field">Giá mới ($/đêm)<input id="price-input" type="number" min="20" max="1500" value="'+state.prices[type]+'"></label>','<button class="button button-secondary" value="cancel">Hủy</button><button class="button button-primary" id="confirm-price" type="button">Áp dụng</button>');
- $('confirm-price').onclick=()=>{const value=Number($('price-input').value);if(!Number.isFinite(value)||value<20||value>1500){toast('Giá phải từ $20 đến $1,500.','error');return}state.prices[type]=Math.round(value);log('Cập nhật giá '+r.label+' thành '+money(value)+'/đêm.');$('modal').close();saveState(true);render();toast('Đã cập nhật giá phòng.','success')};
-}
-function buildRoom(type){
- const r=roomTypes[type];if(!canSpend(r.build))return;
- spend(r.build,'Xây thêm 1 phòng '+r.label);state.rooms[type]++;state.condition=clamp(state.condition-1,0,100);saveState(true);render();toast('Đã mở rộng thêm một phòng '+r.label+'.','success');
-}
-function hire(role){
- const r=roles[role],cost=r.salary*1.5;if(!canSpend(cost))return;
- spend(cost,'Tuyển nhân viên '+r.name);state.staff[role]++;state.morale=clamp(state.morale+1,0,100);saveState(true);render();
-}
-function fire(role){
- if(state.staff[role]<=0)return;state.staff[role]--;state.morale=clamp(state.morale-2,0,100);log('Giảm một nhân sự bộ phận '+roles[role].name+'.');saveState(true);render();
-}
-function doAction(action,el){
- const id=el.dataset.id,type=el.dataset.type,role=el.dataset.role;
- switch(action){
- case 'price':showPriceModal(type);return;
- case 'pricing':showPriceModal('standard');return;
- case 'build-room':buildRoom(type);return;
- case 'hire':hire(role);return;
- case 'fire':fire(role);return;
- case 'facility':{
-  const f=facilities[id];if(state.facilities[id]||!canSpend(f.cost))return;
-  spend(f.cost,'Đầu tư '+f.name);state.facilities[id]=true;state.service=clamp(state.service+f.bonus*.35,0,100);saveState(true);render();break;
- }
- case 'maintenance':if(!canSpend(2500))return;spend(2500,'Bảo trì cơ sở');state.condition=clamp(state.condition+22,0,100);state.cleanliness=clamp(state.cleanliness+5,0,100);saveState(true);render();break;
- case 'training':if(!canSpend(1800))return;spend(1800,'Đào tạo dịch vụ');state.service=clamp(state.service+8,0,100);state.morale=clamp(state.morale+2,0,100);saveState(true);render();break;
- case 'stock':if(!canSpend(900))return;spend(900,'Nhập vật tư');state.stock=clamp(state.stock+35,0,100);saveState(true);render();break;
- case 'energy':if(!canSpend(1200))return;spend(1200,'Tối ưu năng lượng');state.energy=clamp(state.energy+18,0,100);state.bonuses.green=Math.max(state.bonuses.green,.04);saveState(true);render();break;
- case 'bonus':if(!canSpend(1500))return;spend(1500,'Thưởng hiệu suất');state.morale=clamp(state.morale+12,0,100);saveState(true);render();break;
- case 'staff-training':if(!canSpend(2800))return;spend(2800,'Đào tạo toàn bộ nhân viên');state.service=clamp(state.service+5,0,100);state.morale=clamp(state.morale+8,0,100);saveState(true);render();break;
- case 'marketing':runCampaign('local');break;
- case 'campaign':runCampaign(el.dataset.kind);break;
- case 'contract':offerContract();break;
- case 'loan':state.cash+=10000;state.debt+=10000;log('Giải ngân khoản vay $10,000.');saveState(true);render();break;
- case 'repay':if(!canSpend(5000)||state.debt<=0)return;const paid=Math.min(5000,state.debt);state.cash-=paid;state.debt-=paid;log('Trả nợ gốc '+money(paid)+'.');saveState(true);render();break;
- case 'branch':expandBranch();break;
- case 'research':{
-  const item=research.find(x=>x.id===id);if(!item||state.researched.includes(id)||!canSpend(item.cost))return;
-  spend(item.cost,'Nghiên cứu '+item.name);state.researched.push(id);item.effect(state);saveState(true);render();toast('Đã hoàn tất '+item.name+'.','success');break;
- }
- }
-}
-function expandBranch(){
- const cost=85000;if(!canSpend(cost))return;
- spend(cost,'Mở rộng tập đoàn · chi nhánh mới');
- const n=(state.branches||1)+1;state.branches=n;state.branchNames=state.branchNames||['The First Stay'];state.branchNames.push('Hotel Branch '+n);
- state.rooms.standard+=10;state.rooms.deluxe+=4;state.staff.reception+=1;state.staff.housekeeping+=2;state.staff.maintenance+=1;
- state.reputation=clamp(state.reputation+1,0,100);log('Khai trương chi nhánh '+n+' · bổ sung 14 phòng vào hệ thống.');saveState(true);render();toast('Chi nhánh mới đã đi vào hoạt động.','success');
-}
-function runCampaign(kind){
- const cfg=kind==='premium'?{cost:5500,bonus:.32,days:4,name:'Chiến dịch cao cấp'}:{cost:2000,bonus:.15,days:3,name:'Quảng cáo địa phương'};
- if(!canSpend(cfg.cost))return;spend(cfg.cost,cfg.name);state.marketing=cfg.bonus;state.marketingUntil=state.day+cfg.days;log(cfg.name+' đang hoạt động trong '+cfg.days+' ngày.');saveState(true);render();toast('Chiến dịch đã được triển khai.','success');
-}
-function offerContract(){
- if(state.contract){toast('Bạn đang có một hợp đồng chưa kết thúc.','error');return}
- const target=Math.max(5,Math.ceil(totalRooms()*.45));state.contract={target,progress:0,reward:target*210,due:state.day+3};
- log('Nhận hợp đồng doanh nghiệp: phục vụ '+target+' lượt khách trong 3 ngày.');
- toast('Hợp đồng mới: mục tiêu '+target+' lượt khách.','success');saveState(true);render();
-}
-function createBooking(){
- const reserved=state.bookings.filter(b=>b.status==='confirmed');
- const available=Object.entries(state.rooms).filter(([type,count])=>count>state.guests.filter(g=>g.type===type).length+reserved.filter(b=>b.type===type).length);
- if(!available.length)return;
- const type=pick(available.map(x=>x[0]));const rate=Math.round(state.prices[type]*rand(.94,1.12));
- const booking={id:state.nextBookingId++,name:pick(['Anh Tuấn','Hà My','Minh Khoa','Ngọc Trâm','Phương Linh','Bảo Long','Thu Hà']),type,rate,stay:Math.ceil(rand(1,4)),arrivalAt:(state.day-1)*DAY_MINUTES+(state.minute-480)+Math.round(rand(30,240)),status:'confirmed'};
- state.bookings.unshift(booking);state.bookings=state.bookings.slice(0,60);log('Đặt chỗ mới #'+booking.id+' · '+roomTypes[type].label+' · '+money(rate)+'/đêm.');
-}
-function processBookings(){
- const now=(state.day-1)*DAY_MINUTES+(state.minute-480);
- for(const booking of state.bookings.filter(b=>b.status==='confirmed'&&b.arrivalAt<=now)){
-  if(state.guests.filter(g=>g.type===booking.type).length>=state.rooms[booking.type]){booking.status='cancelled';log('Hủy đặt chỗ #'+booking.id+' do hết phòng.','warning');continue}
-  const satisfaction=clamp(Math.round((state.service+state.bonuses.service)*.45+state.cleanliness*.35+roomTypes[booking.type].comfort*.2+rand(-8,8)),20,100);
-  state.guests.push({id:state.nextGuestId++,name:booking.name,type:booking.type,rate:booking.rate,stay:booking.stay,remaining:booking.stay,status:'staying',satisfaction,spent:0});
-  booking.status='checked-in';state.today.checkins++;state.today.booked++;if(state.contract)state.contract.progress++;
-  log('Check-in đặt trước #'+booking.id+' · '+booking.name+'.');
- }
-}
-function advanceSpeed(){
- state.speed=state.speed===1?2:state.speed===2?4:1;render();
-}
-function togglePause(){
- state.paused=!state.paused;render();saveState(true);
-}
+function guestDemand(){return Math.max(1,Math.round(totalRooms()*(.2+s.rep/250)*(.75+s.cover/400)))}
 function tick(){
- if(state.paused)return;
- const loops=state.speed;
- for(let i=0;i<loops;i++)simulateMinute();
- const now=Date.now();if(now-lastRender>1200){lastRender=now;render();saveState(true)}
+ if(s.paused||s.ending)return;
+ for(let i=0;i<s.speed;i++){s.hour++;if(s.hour>=24){closeDay();return}if(s.hour>=9&&s.hour<=21&&Math.random()<.18&&freeRooms()>0)newGuest();if(s.hour%4===0){s.quality=clamp(s.quality-.12);s.clean=clamp(s.clean-.25);s.condition=clamp(s.condition-.08)}}
+ render();if(s.hour%2===0)save();
 }
-function bindEvents(){
- document.querySelectorAll('.nav-item').forEach(b=>b.addEventListener('click',()=>{currentTab=b.dataset.tab;render()}));
- $('tab-content').addEventListener('click',e=>{const b=e.target.closest('[data-action]');if(b&&!b.disabled)doAction(b.dataset.action,b)});
- $('pause-btn').addEventListener('click',togglePause);
- $('speed-btn').addEventListener('click',advanceSpeed);
- $('close-day-btn').addEventListener('click',()=>{if(confirm('Chốt sổ ngày hiện tại và chuyển sang ngày tiếp theo?'))closeDay(false)});
- $('save-btn').addEventListener('click',()=>saveState(false));
- $('modal').addEventListener('click',e=>{if(e.target===$('modal'))$('modal').close()});
- document.addEventListener('visibilitychange',()=>{if(document.hidden)saveState(true)});
- window.addEventListener('beforeunload',()=>saveState(true));
+function bind(){
+ document.querySelectorAll('.nav-btn').forEach(b=>b.onclick=()=>{tab=b.dataset.tab;render()});
+ $('content').onclick=e=>{const b=e.target.closest('[data-act]');if(b&&!b.disabled)doAction(b.dataset.act,b)};
+ $('pause').onclick=()=>{s.paused=!s.paused;render();save()};
+ $('speed').onclick=()=>{s.speed=s.speed===1?2:s.speed===2?4:1;render()};
+ $('endday').onclick=()=>{if(confirm('Kết thúc ngày và chốt sổ khách sạn?'))closeDay()};
+ $('import-file').onchange=async e=>{const f=e.target.files[0];if(!f)return;try{const v=JSON.parse(await f.text());if(!v.rooms||typeof v.cash!=='number')throw Error('invalid');s={...fresh(),...v};note('Đã nhập tiến trình.');save();render();toast('Khôi phục thành công.')}catch{toast('Tệp lưu không hợp lệ.')}e.target.value=''};
+ document.addEventListener('visibilitychange',()=>{if(document.hidden)save()});addEventListener('beforeunload',()=>save());
 }
+function updateSlots(){for(let n=1;n<=3;n++){try{const v=JSON.parse(localStorage.getItem(KEY+'-slot-'+n));$('slot-'+n).textContent=v?'Ngày '+v.day+' · '+fmt(v.cash):'Chưa có dữ liệu'}catch{$('slot-'+n).textContent='Không đọc được'}}}
 function init(){
- state=loadState();state.paused=false;applyOffline();
- if(!state.log.length)log('Chào mừng đến với Hotel Empire. Hãy quản lý khách sạn đầu tiên của bạn.');
- bindEvents();render();saveState(true);
- timer=setInterval(tick,1000);
+ s=load();const mins=Math.min(240,Math.floor((Date.now()-s.last)/60000));
+ if(mins>0&&s.guests.length){const earn=s.guests.reduce((a,g)=>a+g.rate,0)*mins/1440;s.cash+=earn;s.today.revenue+=earn;note('Tiến trình offline: '+mins+' phút.')}
+ if(!s.log.length)note('Chào mừng đến Nocturne Hotel. Hãy cân bằng hoạt động công khai và những lời đề nghị bí ẩn.');
+ bind();render();timer=setInterval(tick,3000);save();
 }
 init();
 })();

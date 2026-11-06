@@ -1,11 +1,11 @@
 {
-  "name": "Hotel Empire — Hotel Management Simulator",
-  "short_name": "Hotel Empire",
-  "description": "Game mô phỏng quản lý khách sạn thuần văn bản.",
+  "name": "Hotel Empire: Underworld",
+  "short_name": "Hotel Underworld",
+  "description": "Mô phỏng điều hành khách sạn noir với các lựa chọn cốt truyện hư cấu.",
   "start_url": "./",
   "scope": "./",
   "display": "standalone",
   "orientation": "any",
-  "background_color": "#0b1220",
-  "theme_color": "#101b2a"
+  "background_color": "#11100f",
+  "theme_color": "#151310"
 }
