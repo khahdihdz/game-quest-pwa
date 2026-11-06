@@ -28,5 +28,5 @@ $("languageBtn").onclick=()=>{state.language=state.language==="vi"?"en":"vi";$("
 $("soundBtn").onclick=()=>toast("Âm thanh đang tắt trong phiên bản này.");
 if(state.mode==="sandbox"){$("sandboxMode").classList.add("active");$("campaignMode").classList.remove("active")}
 if(state.language==="en")$("languageBtn").textContent="EN";
-window.City3D.renderBuildings(state.buildings);cityStats();updateStats();renderBuildings();renderMissions();renderCity();setPaused(state.paused);persist();
-})();
+window.City3D.renderBuildings(state.buildings);cityStats();updateStats();renderBuildings();renderMissions();renderCity();setPaused(state.paused);persist();if("serviceWorker" in navigator && location.protocol.startsWith("http"))navigator.serviceWorker.register("./sw.js").catch(()=>{});
+})();};if(window.City3D)start();else window.addEventListener("city3d-ready",start,{once:true});
