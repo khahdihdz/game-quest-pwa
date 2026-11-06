@@ -1,100 +1,416 @@
-import * as THREE from 'three';
-
-const $=id=>document.getElementById(id);
-const ui={viewport:$('viewport'),overlay:$('overlay'),upgrade:$('upgrade'),pause:$('pause'),result:$('result'),toast:$('toast')};
-const store={get(k,d){try{return JSON.parse(localStorage.getItem('void-'+k))??d}catch{return d}},set(k,v){try{localStorage.setItem('void-'+k,JSON.stringify(v))}catch{}}};
-let scene,camera,renderer,clock,player,arena,stars=[],enemies=[],bullets=[],enemyShots=[],orbs=[],particles=[],decor=[];
-let running=false,paused=false,choosing=false,mode='campaign',elapsed=0,kills=0,score=0,wave=1,level=1,xp=0,xpNeed=12,credits=store.get('credits',0),best=store.get('best',0),hp=100,maxHp=100,damage=18,fireRate=.48,bulletSpeed=19,moveSpeed=8,magnet=3,armor=0,projectiles=1,regen=0,spawnClock=0,shotClock=0,boss=null,bossSpawned=false,bossWave=0,runId=0;
-const input={x:0,z:0,keys:new Set(),pointer:false,joyId:null,joyX:0,joyY:0};
-const upgrades=[
-{id:'power',name:'Plasma Core',desc:'+35% sát thương đạn',glyph:'✦',apply:()=>damage*=1.35},
-{id:'rapid',name:'Overclock',desc:'Tăng 25% tốc độ bắn',glyph:'⌁',apply:()=>fireRate=Math.max(.13,fireRate*.75)},
-{id:'vital',name:'Reinforced Hull',desc:'+30 máu tối đa và hồi đầy',glyph:'⬡',apply:()=>{maxHp+=30;hp=Math.min(maxHp,hp+30)}},
-{id:'swift',name:'Phase Drive',desc:'+20% tốc độ di chuyển',glyph:'➤',apply:()=>moveSpeed*=1.2},
-{id:'multi',name:'Split Chamber',desc:'Bắn thêm 1 luồng đạn',glyph:'⋈',apply:()=>projectiles=Math.min(5,projectiles+1)},
-{id:'magnet',name:'Gravity Well',desc:'Hút XP từ xa hơn',glyph:'◎',apply:()=>magnet+=3},
-{id:'armor',name:'Aegis Shield',desc:'Giảm 15% sát thương nhận vào',glyph:'◈',apply:()=>armor=Math.min(.6,armor+.15)},
-{id:'regen',name:'Nanobot Swarm',desc:'Hồi 1.5 máu mỗi giây',glyph:'✚',apply:()=>regen+=1.5},
-{id:'velocity',name:'Rail Accelerator',desc:'+25% tốc độ đạn',glyph:'➶',apply:()=>bulletSpeed*=1.25}
+'use strict';
+(() => {
+const $ = id => document.getElementById(id);
+const STORE_KEY = 'hotel-empire-save-v1';
+const DAY_MINUTES = 900;
+const MAX_OFFLINE_MS = 8 * 60 * 60 * 1000;
+const money = n => '$' + Math.round(n).toLocaleString('en-US');
+const number = n => Math.floor(n).toLocaleString('vi-VN');
+const clamp = (n,min,max) => Math.max(min,Math.min(max,n));
+const rand = (a,b) => Math.random()*(b-a)+a;
+const pick = arr => arr[Math.floor(Math.random()*arr.length)];
+const escapeHTML = value => String(value).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const roomTypes = {
+ standard:{name:'Standard',label:'Tiêu chuẩn',base:75,comfort:55,capacity:2,build:8500,clean:8},
+ deluxe:{name:'Deluxe',label:'Cao cấp',base:125,comfort:72,capacity:2,build:14500,clean:13},
+ suite:{name:'Suite',label:'Suite',base:220,comfort:88,capacity:3,build:28000,clean:22},
+ family:{name:'Family',label:'Gia đình',base:175,comfort:80,capacity:4,build:22000,clean:18}
+};
+const roles = {
+ reception:{name:'Lễ tân',salary:1250,productivity:1.0},
+ housekeeping:{name:'Buồng phòng',salary:1050,productivity:1.0},
+ kitchen:{name:'Bếp & nhà hàng',salary:1350,productivity:1.0},
+ maintenance:{name:'Kỹ thuật',salary:1450,productivity:1.0},
+ manager:{name:'Quản lý',salary:2600,productivity:1.0}
+};
+const facilities = {
+ restaurant:{name:'Nhà hàng',cost:18000,upkeep:230,bonus:8,desc:'Tăng doanh thu phụ trợ và mức hài lòng.'},
+ spa:{name:'Spa & wellness',cost:26000,upkeep:310,bonus:10,desc:'Thu hút khách nghỉ dưỡng, tăng giá trị đơn.'},
+ conference:{name:'Phòng hội nghị',cost:34000,upkeep:390,bonus:12,desc:'Mở khóa khách đoàn và hợp đồng doanh nghiệp.'},
+ pool:{name:'Hồ bơi',cost:22000,upkeep:280,bonus:9,desc:'Tăng sức hút và điểm đánh giá.'},
+ airport:{name:'Đưa đón sân bay',cost:12500,upkeep:180,bonus:5,desc:'Tăng chuyển đổi đặt phòng.'}
+};
+const research = [
+{id:'yield',name:'Revenue Management',cost:12000,desc:'Tối ưu giá theo nhu cầu; tăng doanh thu phòng 8%.',effect:s=>s.bonuses.yield+=.08},
+{id:'service',name:'Service Excellence',cost:16000,desc:'Quy trình dịch vụ tốt hơn; tăng chất lượng 8 điểm.',effect:s=>s.bonuses.service+=8},
+{id:'automation',name:'Smart Operations',cost:24000,desc:'Tự động hóa vận hành; giảm chi phí vận hành 10%.',effect:s=>s.bonuses.automation+=.1},
+{id:'loyalty',name:'Loyalty Program',cost:20000,desc:'Khách quay lại thường xuyên hơn; tăng nhu cầu 10%.',effect:s=>s.bonuses.loyalty+=.1},
+{id:'green',name:'Green Hotel',cost:28000,desc:'Tiết kiệm năng lượng và tăng danh tiếng.',effect:s=>s.bonuses.green+=.12}
 ];
-function mat(color,roughness=.65,metalness=.1,emissive=0){return new THREE.MeshStandardMaterial({color,roughness,metalness,emissive:color,emissiveIntensity:emissive})}
-function mesh(geo,material,x=0,y=0,z=0){const m=new THREE.Mesh(geo,material);m.position.set(x,y,z);return m}
-function init3D(){
- scene=new THREE.Scene();scene.background=new THREE.Color(0x080e19);scene.fog=new THREE.FogExp2(0x080e19,.018);
- camera=new THREE.PerspectiveCamera(52,1,.1,180);camera.position.set(0,22,25);camera.lookAt(0,0,0);
- renderer=new THREE.WebGLRenderer({antialias:true,powerPreference:'high-performance'});renderer.setPixelRatio(Math.min(devicePixelRatio,1.7));renderer.shadowMap.enabled=true;renderer.shadowMap.type=THREE.PCFSoftShadowMap;renderer.outputColorSpace=THREE.SRGBColorSpace;ui.viewport.appendChild(renderer.domElement);
- scene.add(new THREE.HemisphereLight(0x9bcfff,0x101521,2.1));const sun=new THREE.DirectionalLight(0x9bdfff,2.2);sun.position.set(-8,18,10);sun.castShadow=true;sun.shadow.mapSize.set(1024,1024);scene.add(sun);
- arena=new THREE.Group();scene.add(arena);
- const floor=mesh(new THREE.CylinderGeometry(18,18,.5,64),mat(0x152438,.9,.25),0,-.35,0);floor.receiveShadow=true;arena.add(floor);
- const grid=new THREE.GridHelper(36,36,0x28617a,0x20374c);grid.position.y=-.08;arena.add(grid);
- const ring=mesh(new THREE.TorusGeometry(18,.16,8,96),new THREE.MeshBasicMaterial({color:0x3ce2ff}));ring.rotation.x=Math.PI/2;ring.position.y=-.05;arena.add(ring);
- for(let i=0;i<28;i++){const a=i/28*Math.PI*2,r=18.8;const p=mesh(new THREE.ConeGeometry(.34,1.3,5),mat(0x31506c,.6,.2,.25),Math.cos(a)*r,.3,Math.sin(a)*r);p.rotation.z=Math.PI;arena.add(p)}
- for(let i=0;i<45;i++){const a=Math.random()*Math.PI*2,r=5+Math.random()*12;const rock=mesh(new THREE.DodecahedronGeometry(.25+Math.random()*.55,0),mat(i%3?0x263c51:0x285e71),Math.cos(a)*r,-.05,Math.sin(a)*r);rock.scale.y=.35;rock.rotation.set(Math.random(),Math.random(),Math.random());arena.add(rock);decor.push(rock)}
- const starGeo=new THREE.BufferGeometry(),positions=[];for(let i=0;i<600;i++)positions.push((Math.random()-.5)*150,12+Math.random()*60,(Math.random()-.5)*150);starGeo.setAttribute('position',new THREE.Float32BufferAttribute(positions,3));const starMat=new THREE.PointsMaterial({color:0x9acfff,size:.16,transparent:true,opacity:.7});scene.add(new THREE.Points(starGeo,starMat));
- player=new THREE.Group();const body=mesh(new THREE.CapsuleGeometry(.48,.8,4,8),mat(0x48dfff,.3,.55,.5),0,.72,0);body.castShadow=true;player.add(body);const core=mesh(new THREE.OctahedronGeometry(.34),new THREE.MeshStandardMaterial({color:0xc5ffff,emissive:0x43dfff,emissiveIntensity:2,metalness:.4,roughness:.2}),0,1.55,0);player.add(core);const ringP=mesh(new THREE.TorusGeometry(.72,.055,8,32),new THREE.MeshBasicMaterial({color:0x53e8ff}),0,.22,0);ringP.rotation.x=Math.PI/2;player.add(ringP);scene.add(player);
- clock=new THREE.Clock();resize();window.addEventListener('resize',resize);renderer.setAnimationLoop(frame);
+const events = [
+{title:'Hội chợ du lịch trong thành phố',text:'Lượng khách tìm phòng tăng trong ngày.',demand:1.28,rep:0},
+{title:'Đợt nắng nóng',text:'Chi phí điện tăng do điều hòa hoạt động liên tục.',cost:1.22,rep:0},
+{title:'Bài đánh giá tích cực lan truyền',text:'Khách mới tin tưởng thương hiệu hơn.',demand:1.12,rep:3},
+{title:'Sự cố đường ống nước',text:'Một khoản bảo trì khẩn cấp phát sinh.',expense:1800,rep:-2},
+{title:'Đoàn khách doanh nghiệp',text:'Có cơ hội nhận hợp đồng lưu trú theo đoàn.',contract:true,rep:0},
+{title:'Mùa thấp điểm',text:'Nhu cầu đặt phòng giảm tạm thời.',demand:.78,rep:0},
+{title:'Đầu bếp được vinh danh',text:'Nhà hàng được chú ý, khách hài lòng hơn.',rep:2,demand:1.08},
+{title:'Đối thủ khai trương',text:'Thị trường cạnh tranh hơn trong vài ngày.',demand:.9,rep:0}
+];
+const freshState = () => ({
+version:1,hotelName:'The First Stay',location:'Đà Nẵng · Việt Nam',day:1,minute:480,paused:false,speed:1,
+cash:120000,debt:30000,reputation:65,stars:2,experience:0,level:1,
+rooms:{standard:12,deluxe:6,suite:2,family:0},occupied:0,bookings:[],guests:[],nextGuestId:1,
+prices:{standard:75,deluxe:125,suite:220,family:175},staff:{reception:3,housekeeping:5,kitchen:2,maintenance:1,manager:1},
+morale:78,service:68,cleanliness:86,condition:92,energy:85,stock:100,
+facilities:{restaurant:true,spa:false,conference:false,pool:false,airport:false},
+researched:[],bonuses:{yield:0,service:0,automation:0,loyalty:0,green:0},
+marketing:0,marketingUntil:0,contract:null,history:[],log:[],lastSave:Date.now(),
+today:{revenue:0,expenses:0,checkins:0,checkouts:0,complaints:0,booked:0},
+lifetime:{revenue:0,guests:0,days:0,profit:0}
+});
+let state;
+let currentTab='overview';
+let timer=null;
+let lastRender=0;
+let toastTimer=null;
+function loadState(){
+ try{
+  const raw=localStorage.getItem(STORE_KEY);
+  if(!raw)return freshState();
+  const parsed=JSON.parse(raw);
+  const base=freshState();
+  const merged={...base,...parsed,rooms:{...base.rooms,...parsed.rooms},prices:{...base.prices,...parsed.prices},staff:{...base.staff,...parsed.staff},facilities:{...base.facilities,...parsed.facilities},bonuses:{...base.bonuses,...parsed.bonuses},today:{...base.today,...parsed.today},lifetime:{...base.lifetime,...parsed.lifetime}};
+  return merged;
+ }catch{return freshState()}
 }
-function resize(){if(!renderer)return;const w=ui.viewport.clientWidth,h=ui.viewport.clientHeight;camera.aspect=w/h;camera.updateProjectionMatrix();renderer.setSize(w,h,false)}
-function makeEnemy(type='drone',isBoss=false){
- const g=new THREE.Group();let color=type==='brute'?0xffa34f:type==='runner'?0xff557b:type==='spitter'?0xc178ff:0xe85d86;if(isBoss)color=0xff315e;
- const body=mesh(isBoss?new THREE.IcosahedronGeometry(1.55,1):type==='brute'?new THREE.DodecahedronGeometry(.9,1):type==='runner'?new THREE.TetrahedronGeometry(.72,1):new THREE.IcosahedronGeometry(.65,1),new THREE.MeshStandardMaterial({color,roughness:.35,metalness:.35,emissive:color,emissiveIntensity:isBoss?.65:.22}),0,isBoss?1.65:.8,0);body.castShadow=true;g.add(body);
- const eye=mesh(new THREE.SphereGeometry(isBoss?.2:.12,8,8),new THREE.MeshBasicMaterial({color:0xfff1c9}),0,isBoss?1.8:.92,.52);g.add(eye);
- if(isBoss){const halo=mesh(new THREE.TorusGeometry(2,.09,8,48),new THREE.MeshBasicMaterial({color:0xff537a}));halo.rotation.x=Math.PI/2;halo.position.y=.1;g.add(halo);g.userData.maxHp=900+wave*220;g.userData.hp=g.userData.maxHp;g.userData.speed=1.45;g.userData.damage=22;g.userData.radius=1.5}
- else{g.userData.maxHp=type==='brute'?115:type==='runner'?36:type==='spitter'?48:58;g.userData.hp=g.userData.maxHp;g.userData.speed=type==='brute'?1.8:type==='runner'?4.7:type==='spitter'?1.9:2.7;g.userData.damage=type==='brute'?18:10;g.userData.radius=type==='brute'?.85:.58}
- g.userData.type=type;g.userData.isBoss=isBoss;g.userData.attack=0;g.userData.hit=0;let a=Math.random()*Math.PI*2,r=18+Math.random()*3;g.position.set(Math.cos(a)*r,0,Math.sin(a)*r);scene.add(g);enemies.push(g);if(isBoss){boss=g;bossWave=wave;bossSpawned=true;ui.bossWrap=$('boss-wrap');ui.bossWrap.classList.remove('hidden');$('boss-hp-label').textContent='100%';$('boss-bar').style.width='100%';showToast('⚠ VOID TITAN ĐÃ XUẤT HIỆN')}
- return g;
+function saveState(silent=false){
+ state.lastSave=Date.now();
+ try{localStorage.setItem(STORE_KEY,JSON.stringify(state));if(!silent)toast('Đã lưu tiến trình.','success')}
+ catch{if(!silent)toast('Không thể lưu. Bộ nhớ trình duyệt có thể đã đầy.','error')}
 }
-function spawnEnemy(){if(enemies.length>95)return;let t='drone',roll=Math.random();if(wave>1&&roll<.18)t='runner';else if(wave>2&&roll<.34)t='spitter';else if(wave>3&&roll<.52)t='brute';makeEnemy(t)}
-function spawnBoss(){if(bossSpawned)return;bossSpawned=true;makeEnemy('boss',true)}
-function clearGroup(arr){for(const o of arr)scene.remove(o);arr.length=0}
-function resetRun(){
- runId++;clearGroup(enemies);clearGroup(bullets);clearGroup(enemyShots);clearGroup(orbs);clearGroup(particles);if(boss){scene.remove(boss);boss=null}
- elapsed=0;kills=0;score=0;wave=1;level=1;xp=0;xpNeed=12;hp=100;maxHp=100;damage=18;fireRate=.48;bulletSpeed=19;moveSpeed=8;magnet=3;armor=0;projectiles=1;regen=0;spawnClock=1;shotClock=0;bossSpawned=false;bossWave=0;choosing=false;paused=false;player.position.set(0,0,0);$('boss-wrap').classList.add('hidden');updateHUD();ui.overlay.classList.add('hidden');ui.upgrade.classList.add('hidden');ui.pause.classList.add('hidden');ui.result.classList.add('hidden');running=true;clock.getDelta();
+function log(message,type='info'){
+ state.log.unshift({day:state.day,minute:state.minute,text:message,type});
+ state.log=state.log.slice(0,80);
 }
-function updateHUD(){const m=Math.floor(elapsed/60),s=Math.floor(elapsed%60);$('time').textContent=String(m).padStart(2,'0')+':'+String(s).padStart(2,'0');$('wave').textContent=String(wave).padStart(2,'0');$('kills').textContent=kills;$('level').textContent=level;$('hp-label').textContent=Math.ceil(hp)+' / '+maxHp;$('hp-bar').style.width=Math.max(0,hp/maxHp*100)+'%';$('xp-label').textContent=xp+' / '+xpNeed+' XP';$('xp-bar').style.width=xp/xpNeed*100+'%';$('coins').textContent=credits;$('best').textContent=best}
-function updateMenu(){ $('menu-best').textContent=best;$('menu-coins').textContent=credits;$('coins').textContent=credits;$('best').textContent=best}
-function showToast(msg){ui.toast.textContent=msg;ui.toast.classList.add('show');clearTimeout(showToast.t);showToast.t=setTimeout(()=>ui.toast.classList.remove('show'),1400)}
-function gainXP(n){xp+=n;while(xp>=xpNeed){xp-=xpNeed;level++;xpNeed=Math.floor(xpNeed*1.24+5);levelUp()}}
-function levelUp(){choosing=true;running=false;clock.getDelta();const picks=[...upgrades].sort(()=>Math.random()-.5).slice(0,3);$('upgrade-options').innerHTML='';for(const u of picks){const b=document.createElement('button');b.className='upgrade-card';b.innerHTML='<span class="glyph">'+u.glyph+'</span><b>'+u.name+'</b><small>'+u.desc+'</small>';b.addEventListener('click',()=>{u.apply();ui.upgrade.classList.add('hidden');choosing=false;running=true;clock.getDelta();showToast(u.name.toUpperCase()+' ONLINE');updateHUD()},{once:true});$('upgrade-options').appendChild(b)}ui.upgrade.classList.remove('hidden')}
-function fire(){let target=null,dist=Infinity;for(const e of enemies){const d=player.position.distanceTo(e.position);if(d<dist){dist=d;target=e}}if(!target)return;const dir=new THREE.Vector3().subVectors(target.position,player.position).setY(0).normalize();for(let i=0;i<projectiles;i++){const spread=(i-(projectiles-1)/2)*.11;const d=dir.clone().applyAxisAngle(new THREE.Vector3(0,1,0),spread);const b=mesh(new THREE.SphereGeometry(.16,8,8),new THREE.MeshBasicMaterial({color:0x8ef8ff}),player.position.x,.95,player.position.z);b.userData={vel:d.multiplyScalar(bulletSpeed),life:1.8,damage};scene.add(b);bullets.push(b)}}
-function makeOrb(pos,value){const o=mesh(new THREE.IcosahedronGeometry(.22,0),new THREE.MeshStandardMaterial({color:0x9cff83,emissive:0x64ff8a,emissiveIntensity:1.2}),pos.x,.35,pos.z);o.userData={value};scene.add(o);orbs.push(o)}
-function burst(pos,color=0x70eaff,count=8){for(let i=0;i<count;i++){const p=mesh(new THREE.SphereGeometry(.07,5,5),new THREE.MeshBasicMaterial({color,transparent:true}),pos.x,.8+Math.random()*.5,pos.z);p.userData={vel:new THREE.Vector3((Math.random()-.5)*5,Math.random()*4,(Math.random()-.5)*5),life:.45+Math.random()*.45};scene.add(p);particles.push(p)}}
-function hurt(n){hp-=Math.max(1,n*(1-armor));if(hp<=0){hp=0;endRun(false)}updateHUD()}
-function defeat(e){const pos=e.position.clone();const bossKill=e.userData.isBoss;scene.remove(e);enemies.splice(enemies.indexOf(e),1);if(bossKill){boss=null;ui.bossWrap.classList.add('hidden');credits+=30;score+=2500;makeOrb(pos,10);showToast('VOID TITAN ĐÃ BỊ TIÊU DIỆT!');if(mode==='campaign'&&wave>=10){endRun(true);return}}else{makeOrb(pos,1+Math.floor(wave/4));score+=10+wave*2}
- kills++;burst(pos,bossKill?0xff547b:0x77eaff,bossKill?35:9);if(kills%25===0){credits+=2;store.set('credits',credits)}updateHUD()}
-function endRun(victory){running=false;paused=false;const final=Math.floor(score+elapsed*4+wave*100);best=Math.max(best,final);credits+=Math.floor(final/500);store.set('best',best);store.set('credits',credits);updateMenu();$('result-title').textContent=victory?'KHU VỰC ĐÃ ĐƯỢC GIẢI PHÓNG':'TÍN HIỆU ĐÃ TẮT';$('final-score').textContent=final.toLocaleString('vi-VN');$('final-kills').textContent=kills;$('final-time').textContent=$('time').textContent;$('final-wave').textContent=wave;ui.result.classList.remove('hidden')}
-function pauseGame(){if(!running&&!paused)return;paused=!paused;running=!paused;ui.pause.classList.toggle('hidden',!paused);clock.getDelta()}
-function startGame(){mode=document.querySelector('.mode.active').dataset.mode;resetRun()}
-function goMenu(){running=false;paused=false;ui.pause.classList.add('hidden');ui.result.classList.add('hidden');ui.upgrade.classList.add('hidden');ui.overlay.classList.remove('hidden');updateMenu()}
-function moveInput(){let x=0,z=0;if(input.keys.has('KeyA')||input.keys.has('ArrowLeft'))x--;if(input.keys.has('KeyD')||input.keys.has('ArrowRight'))x++;if(input.keys.has('KeyW')||input.keys.has('ArrowUp'))z--;if(input.keys.has('KeyS')||input.keys.has('ArrowDown'))z++;x+=input.x;z+=input.z;const v=new THREE.Vector2(x,z);if(v.length()>1)v.normalize();return v}
-function frame(){
- const dt=Math.min(clock.getDelta(),.04);if(running&&!choosing){elapsed+=dt;const newWave=Math.floor(elapsed/50)+1;if(newWave>wave){wave=newWave;showToast('WAVE '+wave+' INCOMING');if(wave%2===0)credits+=2}
- if(wave%5===0&&bossWave!==wave&&!boss)spawnBoss();
- const mv=moveInput();player.position.x+=mv.x*moveSpeed*dt;player.position.z+=mv.y*moveSpeed*dt;const len=Math.hypot(player.position.x,player.position.z);if(len>16.2){player.position.x*=16.2/len;player.position.z*=16.2/len}
- player.rotation.y=Math.atan2(mv.x,mv.y);player.children[1].rotation.y+=dt*2;player.children[2].rotation.z+=dt*1.5;
- shotClock-=dt;if(shotClock<=0){fire();shotClock=fireRate}
- spawnClock-=dt;if(spawnClock<=0){spawnEnemy();spawnClock=Math.max(.22,1.25-wave*.065)*(0.65+Math.random()*.65)}
- hp=Math.min(maxHp,hp+regen*dt);
- for(let i=enemies.length-1;i>=0;i--){const e=enemies[i],v=new THREE.Vector3(player.position.x-e.position.x,0,player.position.z-e.position.z),d=v.length();if(d>.001){v.normalize();if(e.userData.type==='spitter'&&d<9){e.userData.attack-=dt;if(e.userData.attack<=0){const shot=mesh(new THREE.SphereGeometry(.18,8,8),new THREE.MeshBasicMaterial({color:0xd58cff}),e.position.x,.8,e.position.z);shot.userData={vel:v.clone().multiplyScalar(8),life:3,damage:9};scene.add(shot);enemyShots.push(shot);e.userData.attack=2.2}}else e.position.addScaledVector(v,e.userData.speed*dt)}
- e.rotation.y+=dt*1.8;e.position.y=Math.sin(elapsed*4+i)*.08;
- if(d<e.userData.radius+.65){e.userData.attack-=dt;if(e.userData.attack<=0){hurt(e.userData.damage);e.userData.attack=e.userData.isBoss?.65:.85}}
- if(e.userData.isBoss){$('boss-hp-label').textContent=Math.ceil(e.userData.hp/e.userData.maxHp*100)+'%';$('boss-bar').style.width=Math.max(0,e.userData.hp/e.userData.maxHp*100)+'%'}
+function toast(message,type='info'){
+ const el=document.createElement('div');el.className='toast '+type;el.textContent=message;$('toast-region').append(el);
+ setTimeout(()=>el.remove(),3400);
+}
+function totalRooms(){return Object.values(state.rooms).reduce((a,b)=>a+b,0)}
+function occupiedRooms(){return state.guests.filter(g=>g.status==='staying').length}
+function occupancy(){return totalRooms()?occupiedRooms()/totalRooms():0}
+function roomRevenue(){return Object.entries(state.rooms).reduce((sum,[type,count])=>sum+count*state.prices[type],0)}
+function staffCount(){return Object.values(state.staff).reduce((a,b)=>a+b,0)}
+function dailyPayroll(){return Object.entries(state.staff).reduce((sum,[role,count])=>sum+roles[role].salary*count/30,0)}
+function facilityUpkeep(){return Object.entries(state.facilities).reduce((sum,[id,active])=>sum+(active?facilities[id].upkeep:0),0)}
+function guestDemand(){
+ const season=1+Math.sin((state.day%30)/30*Math.PI*2)*.13;
+ const rep=0.65+state.reputation/180;
+ const starsFactor=1+(state.stars-2)*.055;
+ const marketing=state.marketingUntil>=state.day?1+state.marketing:1;
+ const loyalty=1+state.bonuses.loyalty;
+ const capacity=totalRooms();
+ return Math.max(0,Math.round((capacity*.11+2)*season*rep*starsFactor*marketing*loyalty));
+}
+function addGuest(){
+ const free=totalRooms()-occupiedRooms();
+ if(free<=0)return;
+ const available=Object.entries(state.rooms).filter(([type,count])=>count>state.guests.filter(g=>g.status==='staying'&&g.type===type).length);
+ if(!available.length)return;
+ const weights=available.map(([type,count])=>Math.max(1,count)*Math.max(1,roomTypes[type].comfort));
+ const total=weights.reduce((a,b)=>a+b,0);let roll=Math.random()*total;let chosen=available[0][0];
+ for(let i=0;i<available.length;i++){roll-=weights[i];if(roll<=0){chosen=available[i][0];break}}
+ const rate=state.prices[chosen];
+ const stay=Math.ceil(rand(1,4));
+ const satisfaction=clamp(Math.round(state.service*.45+state.cleanliness*.35+roomTypes[chosen].comfort*.2+rand(-8,8)),20,100);
+ state.guests.push({id:state.nextGuestId++,name:pick(['Minh Anh','Hoàng Nam','Gia Hân','Quốc Bảo','Thanh Vy','Tuấn Kiệt','Mai Chi','Khánh Linh','Đức Anh','Bảo Ngọc']),type:chosen,rate,stay,remaining:stay,status:'staying',satisfaction,spent:0});
+ state.today.checkins++;state.today.booked++;
+ log('Khách mới nhận phòng '+roomTypes[chosen].label+' · '+money(rate)+'/đêm.');
+}
+function updateGuestMinute(){
+ for(const g of state.guests.filter(x=>x.status==='staying')){
+  g.spent+=g.rate/DAY_MINUTES;
+  if(state.minute%60===0&&Math.random()<.025){
+   const extra=state.facilities.restaurant?rand(8,28):rand(0,8);
+   state.cash+=extra;state.today.revenue+=extra;state.lifetime.revenue+=extra;g.spent+=extra;
+  }
+  if(state.minute%1440===0){g.remaining--;if(g.remaining<=0)checkout(g)}
  }
- for(let i=bullets.length-1;i>=0;i--){const b=bullets[i];b.position.addScaledVector(b.userData.vel,dt);b.userData.life-=dt;let hit=null;for(const e of enemies){if(b.position.distanceTo(e.position.clone().add(new THREE.Vector3(0,.8,0)))<e.userData.radius+.25){hit=e;break}}if(hit){hit.userData.hp-=b.userData.damage;burst(b.position,0x8ef8ff,3);scene.remove(b);bullets.splice(i,1);if(hit.userData.hp<=0)defeat(hit)}else if(b.userData.life<=0||Math.hypot(b.position.x,b.position.z)>22){scene.remove(b);bullets.splice(i,1)}}
- for(let i=enemyShots.length-1;i>=0;i--){const b=enemyShots[i];b.position.addScaledVector(b.userData.vel,dt);b.userData.life-=dt;if(b.position.distanceTo(player.position.clone().add(new THREE.Vector3(0,.8,0)))<.85){hurt(b.userData.damage);scene.remove(b);enemyShots.splice(i,1)}else if(b.userData.life<=0){scene.remove(b);enemyShots.splice(i,1)}}
- for(let i=orbs.length-1;i>=0;i--){const o=orbs[i],d=o.position.distanceTo(player.position);o.rotation.y+=dt*2;if(d<magnet+2)o.position.lerp(new THREE.Vector3(player.position.x,.35,player.position.z),Math.min(1,dt*(d<3?8:3)));if(d<.85){gainXP(o.userData.value);scene.remove(o);orbs.splice(i,1)}}
- for(let i=particles.length-1;i>=0;i--){const p=particles[i];p.position.addScaledVector(p.userData.vel,dt);p.userData.vel.y-=8*dt;p.userData.life-=dt;p.scale.multiplyScalar(.97);if(p.userData.life<=0){scene.remove(p);particles.splice(i,1)}}
- if(Math.floor(elapsed)%2===0)updateHUD();
+ state.guests=state.guests.filter(g=>g.status==='staying');
+}
+function checkout(g){
+ g.status='checked-out';const score=clamp(g.satisfaction+(state.service-65)*.08+(state.cleanliness-80)*.08,1,100);
+ state.reputation=clamp(state.reputation+(score>=80?.16:score<55?-.35:.04),5,100);
+ state.today.checkouts++;state.lifetime.guests++;log(g.name+' trả phòng · mức hài lòng '+Math.round(score)+'/100.');
+}
+function operatingCostPerMinute(){
+ const rooms=totalRooms();
+ const utilities=(rooms*1.35+occupiedRooms()*1.1)*(1-state.bonuses.green);
+ const maintenance=(100-state.condition)*.035+facilityUpkeep()/1440;
+ const wages=dailyPayroll()/1440;
+ return (utilities+maintenance+wages)*(1-state.bonuses.automation);
+}
+function simulateMinute(){
+ if(state.minute>=480+DAY_MINUTES){closeDay(true);return}
+ state.minute++;
+ const demand=guestDemand()/DAY_MINUTES;
+ if(Math.random()<demand*1.7)addGuest();
+ updateGuestMinute();
+ const occ=occupancy();
+ const income=state.guests.filter(g=>g.status==='staying').reduce((a,g)=>a+g.rate/DAY_MINUTES,0);
+ state.cash+=income;state.today.revenue+=income;state.lifetime.revenue+=income;
+ const cost=operatingCostPerMinute();state.cash-=cost;state.today.expenses+=cost;
+ if(state.minute%60===0){
+  state.energy=clamp(state.energy-(2+occ*3),8,100);
+  state.cleanliness=clamp(state.cleanliness-(occ*2.1)+state.staff.housekeeping*.42,15,100);
+  state.condition=clamp(state.condition-.25+(state.staff.maintenance*.08),15,100);
+  state.morale=clamp(state.morale-.12+(state.staff.manager*.06),15,100);
  }
- const camTarget=new THREE.Vector3(player.position.x,0,player.position.z);camera.position.lerp(new THREE.Vector3(camTarget.x,22,camTarget.z+25),.055);camera.lookAt(camTarget);renderer.render(scene,camera);
+ if(state.minute%180===0)maybeEvent();
+ if(state.minute>=480+DAY_MINUTES)closeDay(true);
 }
-function bindControls(){
- window.addEventListener('keydown',e=>{if(['ArrowUp','ArrowDown','ArrowLeft','ArrowRight','Space'].includes(e.code))e.preventDefault();input.keys.add(e.code);if(e.code==='Escape')pauseGame()});
- window.addEventListener('keyup',e=>input.keys.delete(e.code));window.addEventListener('blur',()=>{input.keys.clear();input.x=input.z=0});
- const joy=$('joystick'),stick=$('stick');joy.addEventListener('pointerdown',e=>{input.joyId=e.pointerId;joy.setPointerCapture(e.pointerId);joyMove(e)});joy.addEventListener('pointermove',e=>{if(e.pointerId===input.joyId)joyMove(e)});function joyMove(e){const r=joy.getBoundingClientRect(),cx=r.left+r.width/2,cy=r.top+r.height/2,dx=e.clientX-cx,dy=e.clientY-cy,max=35,l=Math.hypot(dx,dy),k=l>max?max/l:1;input.x=dx*k/max;input.z=dy*k/max;stick.style.left='calc(50% + '+dx*k+'px)';stick.style.top='calc(50% + '+dy*k+'px)'}
- function joyEnd(e){if(e.pointerId!==input.joyId)return;input.joyId=null;input.x=input.z=0;stick.style.left='50%';stick.style.top='50%'}joy.addEventListener('pointerup',joyEnd);joy.addEventListener('pointercancel',joyEnd);
- $('start-btn').addEventListener('click',startGame);$('pause-btn').addEventListener('click',pauseGame);$('resume-btn').addEventListener('click',pauseGame);$('quit-btn').addEventListener('click',goMenu);$('again-btn').addEventListener('click',startGame);$('menu-btn').addEventListener('click',goMenu);
- document.querySelectorAll('.mode').forEach(b=>b.addEventListener('click',()=>{document.querySelectorAll('.mode').forEach(x=>x.classList.remove('active'));b.classList.add('active')}));
+function maybeEvent(){
+ if(Math.random()>.48)return;
+ const event=pick(events);
+ state.log.unshift({day:state.day,minute:state.minute,text:'SỰ KIỆN: '+event.title+' — '+event.text,type:'event'});
+ state.currentEvent={...event,until:state.day+1};
+ if(event.rep)state.reputation=clamp(state.reputation+event.rep,0,100);
+ if(event.expense){state.cash-=event.expense;state.today.expenses+=event.expense}
 }
-init3D();bindControls();updateMenu();updateHUD();
-if('serviceWorker'in navigator)window.addEventListener('load',()=>navigator.serviceWorker.register('./sw.js').catch(()=>{}));
+function closeDay(automatic=false){
+ const occ=occupancy()*100;
+ const revenue=state.today.revenue,expenses=state.today.expenses;
+ const profit=revenue-expenses;
+ state.history.unshift({day:state.day,revenue,expenses,profit,occupancy:occ,guests:state.today.checkins});
+ state.history=state.history.slice(0,30);
+ state.lifetime.days++;state.lifetime.profit+=profit;
+ state.experience+=Math.max(1,Math.floor(state.today.checkins/2)+Math.max(0,Math.floor(profit/1000)));
+ if(state.experience>=state.level*120){state.experience-=state.level*120;state.level++;state.stars=clamp(2+Math.floor((state.level-1)/3),2,5);log('Thăng hạng khách sạn! Mở cấp '+state.level+'.')}
+ if(state.contract&&state.contract.due<=state.day){if(state.contract.progress>=state.contract.target){state.cash+=state.contract.reward;state.reputation=clamp(state.reputation+3,0,100);log('Hoàn thành hợp đồng doanh nghiệp: +'+money(state.contract.reward),'success')}else{state.reputation=clamp(state.reputation-4,0,100);log('Không đạt chỉ tiêu hợp đồng.','warning')}state.contract=null}
+ if(state.debt>0){const interest=state.debt*.0008;state.cash-=interest;log('Lãi vay trong ngày: '+money(interest)+'.')}
+ state.day++;state.minute=480;state.today={revenue:0,expenses:0,checkins:0,checkouts:0,complaints:0,booked:0};
+ state.cleanliness=clamp(state.cleanliness+state.staff.housekeeping*2.2,0,100);
+ state.energy=clamp(state.energy+12,0,100);
+ state.condition=clamp(state.condition+state.staff.maintenance*.7,0,100);
+ state.stock=clamp(state.stock+15,0,100);
+ state.morale=clamp(state.morale+1,0,100);
+ log('Đã chốt ngày '+(state.day-1)+'. Lợi nhuận: '+money(profit)+'. Công suất cuối ngày: '+Math.round(occ)+'%.');
+ saveState(true);
+ if(!automatic)toast('Đã chuyển sang ngày '+state.day+'.','success');
+ render();
+}
+function applyOffline(){
+ const elapsed=clamp(Date.now()-(state.lastSave||Date.now()),0,MAX_OFFLINE_MS);
+ const minutes=Math.floor(elapsed/1000*state.speed*5);
+ if(minutes<=0)return;
+ const capped=Math.min(minutes,DAY_MINUTES*3);
+ let earned=0;
+ for(let i=0;i<capped;i++){
+  const occ=occupancy();const rev=state.guests.reduce((a,g)=>a+g.rate/DAY_MINUTES,0);
+  const cost=operatingCostPerMinute();earned+=rev-cost;
+  state.minute++;
+  if(state.minute>=480+DAY_MINUTES){state.day++;state.minute=480;state.today={revenue:0,expenses:0,checkins:0,checkouts:0,complaints:0,booked:0};state.history.unshift({day:state.day-1,revenue:0,expenses:0,profit:0,occupancy:occ*100,guests:0})}
+  if(i%60===0){state.cleanliness=clamp(state.cleanliness-.5+state.staff.housekeeping*.12,0,100);state.condition=clamp(state.condition-.15+state.staff.maintenance*.04,0,100)}
+ }
+ state.cash+=earned;state.today.revenue+=Math.max(0,earned);state.lifetime.profit+=earned;state.lastSave=Date.now();
+ if(capped>0)state.log.unshift({day:state.day,minute:state.minute,text:'Mô phỏng offline '+number(capped)+' phút · '+(earned>=0?'+':'')+money(earned)+'.',type:'info'});
+}
+function fmtTime(minute){const m=minute%1440;return String(Math.floor(m/60)).padStart(2,'0')+':'+String(m%60).padStart(2,'0')}
+function bar(label,value,color=''){return '<div class="stat-row"><span>'+label+'</span><div class="bar"><i class="'+color+'" style="width:'+clamp(value,0,100)+'%"></i></div><strong>'+Math.round(value)+'%</strong></div>'}
+function metric(label,value,note='',tone=''){return '<div class="metric-card"><div class="metric-label">'+label+'</div><div class="metric-value '+tone+'">'+value+'</div><div class="metric-note">'+note+'</div></div>'}
+function panel(title,subtitle,body,span='span-6'){return '<section class="panel '+span+'"><div class="section-head"><div><h3>'+title+'</h3><div class="panel-subtitle">'+subtitle+'</div></div></div>'+body+'</section>'}
+function renderOverview(){
+ const occ=occupiedRooms(),rooms=totalRooms(),rev=state.today.revenue,profit=rev-state.today.expenses;
+ const trend=state.history.slice(0,7).reverse();const max=Math.max(1,...trend.map(x=>Math.abs(x.profit)));
+ const chart=trend.length?'<div class="chart">'+trend.map(x=>'<div class="chart-col"><i style="height:'+Math.max(3,Math.abs(x.profit)/max*85)+'%"></i><small>D'+x.day+'</small></div>').join('')+'</div>':'<div class="empty-state">Báo cáo sẽ xuất hiện sau ngày đầu tiên.</div>';
+ const logs=state.log.slice(0,7).map(x=>'<div class="log-item"><time>D'+x.day+' '+fmtTime(x.minute)+'</time><p>'+escapeHTML(x.text)+'</p></div>').join('')||'<div class="empty-state">Chưa có hoạt động.</div>';
+ return '<div class="dashboard-grid">'+
+ metric('Doanh thu hôm nay',money(rev),'Doanh thu tích lũy trong ngày','positive')+
+ metric('Lợi nhuận tạm tính',(profit<0?'−':'')+money(Math.abs(profit)),'Sau chi phí vận hành',profit>=0?'positive':'negative')+
+ metric('Công suất phòng',Math.round(occupancy()*100)+'%',occ+' / '+rooms+' phòng đang sử dụng','accent')+
+ metric('Danh tiếng',Math.round(state.reputation)+'/100','Hạng '+state.stars+' sao','gold')+
+ panel('Hiệu suất vận hành','Chỉ số ảnh hưởng trực tiếp tới trải nghiệm khách', '<div class="stat-list">'+bar('Chất lượng dịch vụ',state.service)+bar('Vệ sinh',state.cleanliness,'blue')+bar('Tình trạng cơ sở',state.condition,'gold')+bar('Năng lượng',state.energy,'gold')+bar('Tinh thần nhân viên',state.morale,'blue')+'</div>','span-5')+
+ panel('Dòng tiền 7 ngày','Lợi nhuận sau chi phí theo ngày',chart,'span-7')+
+ panel('Hoạt động gần đây','Nhật ký vận hành theo thời gian', '<div class="log-list">'+logs+'</div>','span-7')+
+ panel('Quyết định nhanh','Các hành động thường dùng', '<div class="action-grid"><div class="action-card"><strong>Chiến dịch marketing</strong><p>Thu hút thêm khách trong 3 ngày.</p><button class="button button-secondary" data-action="marketing">Chạy chiến dịch</button></div><div class="action-card"><strong>Bảo trì tổng thể</strong><p>Khôi phục tình trạng cơ sở vật chất.</p><button class="button button-secondary" data-action="maintenance">Bảo trì ngay</button></div><div class="action-card"><strong>Điều chỉnh giá</strong><p>Tối ưu doanh thu theo nhu cầu.</p><button class="button button-secondary" data-action="pricing">Định giá phòng</button></div><div class="action-card"><strong>Nhận hợp đồng</strong><p>Nhận đoàn khách doanh nghiệp.</p><button class="button button-secondary" data-action="contract">Tìm hợp đồng</button></div></div>','span-5')+
+ '</div>';
+}
+function renderRooms(){
+ const rows=Object.entries(state.rooms).map(([type,count])=>{
+  const staying=state.guests.filter(g=>g.type===type).length;
+  const r=roomTypes[type];
+  return '<tr><td><strong>'+r.label+'</strong><div class="muted">'+r.capacity+' khách/phòng · tiện nghi '+r.comfort+'/100</div></td><td>'+count+'</td><td>'+staying+'</td><td>'+money(state.prices[type])+'</td><td><button class="mini-button" data-action="price" data-type="'+type+'">Đổi giá</button> <button class="mini-button" data-action="build-room" data-type="'+type+'">Mở rộng</button></td></tr>'
+ }).join('');
+ const guestRows=state.guests.slice(0,12).map(g=>'<tr><td>#'+g.id+' · '+escapeHTML(g.name)+'</td><td>'+roomTypes[g.type].label+'</td><td>'+g.remaining+' đêm</td><td>'+money(g.rate)+'</td><td><span class="tag good">Đang lưu trú</span></td></tr>').join('');
+ return '<div class="dashboard-grid">'+
+ metric('Tổng số phòng',number(totalRooms()),'Sức chứa toàn khách sạn')+
+ metric('Đang có khách',number(occupiedRooms()),'Phòng đang được sử dụng','accent')+
+ metric('Phòng trống',number(totalRooms()-occupiedRooms()),'Có thể nhận khách','positive')+
+ metric('Giá phòng bình quân',money(roomRevenue()/Math.max(1,totalRooms())),'Giá niêm yết trung bình')+
+ panel('Danh mục phòng','Quản lý giá, số lượng và sức chứa','<div class="table-wrap"><table><thead><tr><th>LOẠI PHÒNG</th><th>TỔNG</th><th>ĐANG Ở</th><th>GIÁ/ĐÊM</th><th>THAO TÁC</th></tr></thead><tbody>'+rows+'</tbody></table></div>','span-12')+
+ panel('Danh sách khách đang lưu trú','Theo dõi đặt phòng và thời gian trả phòng','<div class="table-wrap"><table><thead><tr><th>KHÁCH</th><th>LOẠI PHÒNG</th><th>CÒN LẠI</th><th>GIÁ/ĐÊM</th><th>TRẠNG THÁI</th></tr></thead><tbody>'+guestRows+'</tbody></table></div>','span-12')+
+ '</div>';
+}
+function renderOperations(){
+ const fac=Object.entries(facilities).map(([id,f])=>{
+  const active=state.facilities[id];
+  return '<div class="action-card"><div class="row-between"><strong>'+f.name+'</strong><span class="tag '+(active?'good':'warn')+'">'+(active?'Đang hoạt động':'Chưa xây dựng')+'</span></div><p>'+f.desc+'</p><p class="muted">Đầu tư '+money(f.cost)+' · Duy trì '+money(f.upkeep)+'/ngày</p><button class="button button-secondary" data-action="facility" data-id="'+id+'" '+(active?'disabled':'')+'>'+(active?'Đã mở': 'Đầu tư cơ sở')+'</button></div>'
+ }).join('');
+ return '<div class="dashboard-grid">'+
+ metric('Chất lượng dịch vụ',Math.round(state.service)+'/100','Năng lực phục vụ')+
+ metric('Vệ sinh',Math.round(state.cleanliness)+'/100','Phụ thuộc đội buồng phòng')+
+ metric('Tình trạng',Math.round(state.condition)+'/100','Cần bảo trì định kỳ')+
+ metric('Năng lượng',Math.round(state.energy)+'/100','Tác động chi phí điện')+
+ panel('Kiểm soát vận hành','Chủ động duy trì chất lượng', '<div class="action-grid"><div class="action-card"><strong>Bảo trì cơ sở</strong><p>Chi phí $2,500 · +22 điểm tình trạng.</p><button class="button button-secondary" data-action="maintenance">Bảo trì</button></div><div class="action-card"><strong>Đào tạo dịch vụ</strong><p>Chi phí $1,800 · +8 điểm dịch vụ.</p><button class="button button-secondary" data-action="training">Đào tạo</button></div><div class="action-card"><strong>Tiếp tế kho</strong><p>Chi phí $900 · khôi phục vật tư.</p><button class="button button-secondary" data-action="stock">Nhập vật tư</button></div><div class="action-card"><strong>Tiết kiệm năng lượng</strong><p>Chi phí $1,200 · +18 điểm năng lượng.</p><button class="button button-secondary" data-action="energy">Tối ưu điện</button></div></div>','span-6')+
+ panel('Cơ sở dịch vụ','Đầu tư tiện ích để tăng doanh thu và sức hút','<div class="action-grid">'+fac+'</div>','span-6')+
+ '</div>';
+}
+function renderStaff(){
+ const rows=Object.entries(roles).map(([id,r])=>{
+  const count=state.staff[id];
+  return '<tr><td><strong>'+r.name+'</strong><div class="muted">'+money(r.salary)+'/người/tháng</div></td><td>'+count+'</td><td>'+money(r.salary*count/30)+'/ngày</td><td><button class="mini-button" data-action="hire" data-role="'+id+'">Tuyển</button> <button class="mini-button" data-action="fire" data-role="'+id+'" '+(count<=0?'disabled':'')+'>Giảm</button></td></tr>'
+ }).join('');
+ return '<div class="dashboard-grid">'+
+ metric('Tổng nhân sự',number(staffCount()),'Trên toàn khách sạn')+
+ metric('Quỹ lương/ngày',money(dailyPayroll()),'Phân bổ theo ngày')+
+ metric('Tinh thần',Math.round(state.morale)+'/100','Ảnh hưởng năng suất','gold')+
+ metric('Năng lực quản lý',state.staff.manager,'Quản lý đang làm việc')+
+ panel('Biên chế nhân sự','Tuyển dụng hoặc điều chỉnh số lượng nhân viên','<div class="table-wrap"><table><thead><tr><th>BỘ PHẬN</th><th>NHÂN SỰ</th><th>CHI PHÍ ƯỚC TÍNH</th><th>THAO TÁC</th></tr></thead><tbody>'+rows+'</tbody></table></div>','span-12')+
+ panel('Chính sách nhân sự','Các quyết định tác động đến hiệu suất', '<div class="action-grid"><div class="action-card"><strong>Thưởng hiệu suất</strong><p>Chi $1,500 để tăng tinh thần nhân viên.</p><button class="button button-secondary" data-action="bonus">Chi thưởng</button></div><div class="action-card"><strong>Đào tạo toàn bộ</strong><p>Chi $2,800 để tăng dịch vụ và năng suất.</p><button class="button button-secondary" data-action="staff-training">Tổ chức đào tạo</button></div></div>','span-12')+
+ '</div>';
+}
+function renderMarket(){
+ const demand=guestDemand();
+ const facilitiesCount=Object.values(state.facilities).filter(Boolean).length;
+ const priceIndex=clamp(100+(state.reputation-60)*.6+(state.stars-2)*7,70,145);
+ return '<div class="dashboard-grid">'+
+ metric('Nhu cầu dự kiến',number(demand)+' khách/ngày','Ước tính theo danh tiếng và mùa')+
+ metric('Chỉ số giá thị trường',Math.round(priceIndex),'100 = mức trung bình','gold')+
+ metric('Cạnh tranh',state.stars>=4?'Cao':'Trung bình','Dựa trên cấp độ khách sạn')+
+ metric('Tiện ích đang mở',facilitiesCount+'/5','Tăng sức cạnh tranh')+
+ panel('Chiến lược thương mại','Quảng bá thương hiệu và tối ưu công suất','<div class="action-grid"><div class="action-card"><strong>Quảng cáo địa phương</strong><p>$2,000 · tăng nhu cầu 15% trong 3 ngày.</p><button class="button button-secondary" data-action="campaign" data-kind="local">Chạy quảng cáo</button></div><div class="action-card"><strong>Chiến dịch cao cấp</strong><p>$5,500 · tăng nhu cầu 32% trong 4 ngày.</p><button class="button button-secondary" data-action="campaign" data-kind="premium">Triển khai</button></div><div class="action-card"><strong>Điều chỉnh giá linh hoạt</strong><p>Giá cao tăng biên lợi nhuận nhưng có thể giảm nhu cầu.</p><button class="button button-secondary" data-action="pricing">Quản lý giá</button></div><div class="action-card"><strong>Hợp đồng doanh nghiệp</strong><p>Cam kết phục vụ đoàn khách để nhận thưởng.</p><button class="button button-secondary" data-action="contract">Tìm hợp đồng</button></div></div>','span-7')+
+ panel('Chỉ số thị trường','Các yếu tố đang tác động đến khách sạn','<div class="stat-list">'+bar('Danh tiếng',state.reputation)+bar('Chất lượng dịch vụ',state.service,'blue')+bar('Tiện nghi',Math.min(100,facilitiesCount*20+20),'gold')+bar('Giá cạnh tranh',priceIndex,'blue')+'</div><div class="inline-note">Nhu cầu thay đổi theo mùa, danh tiếng, hạng sao, marketing và chương trình khách hàng thân thiết.</div>','span-5')+
+ '</div>';
+}
+function renderFinance(){
+ const assets=state.cash+totalRooms()*9000+Object.entries(state.facilities).filter(([,v])=>v).reduce((a,[id])=>a+facilities[id].cost*.6,0);
+ const net=assets-state.debt;
+ const rows=state.history.slice(0,10).map(x=>'<tr><td>Ngày '+x.day+'</td><td>'+money(x.revenue)+'</td><td>'+money(x.expenses)+'</td><td class="'+(x.profit>=0?'positive':'negative')+'">'+money(x.profit)+'</td><td>'+Math.round(x.occupancy)+'%</td></tr>').join('');
+ return '<div class="dashboard-grid">'+
+ metric('Tiền mặt',money(state.cash),'Số dư khả dụng',state.cash>=0?'positive':'negative')+
+ metric('Khoản vay',money(state.debt),'Dư nợ hiện tại','gold')+
+ metric('Giá trị tài sản ròng',money(net),'Ước tính tài sản trừ nợ')+
+ metric('Lợi nhuận trọn đời',money(state.lifetime.profit),'Tổng lợi nhuận ghi nhận',state.lifetime.profit>=0?'positive':'negative')+
+ panel('Quản lý vốn','Vay vốn hoặc trả nợ để điều tiết dòng tiền','<div class="action-grid"><div class="action-card"><strong>Vay vốn mở rộng</strong><p>Vay $10,000 · lãi suất 0.08%/ngày.</p><button class="button button-secondary" data-action="loan">Vay $10,000</button></div><div class="action-card"><strong>Trả nợ</strong><p>Thanh toán $5,000 dư nợ gốc.</p><button class="button button-secondary" data-action="repay" '+(state.debt<=0?'disabled':'')+'>Trả $5,000</button></div></div><div class="notice info" style="margin-top:12px">Lãi vay được tính khi chốt ngày. Hãy duy trì dòng tiền dương để tránh mất khả năng thanh toán.</div>','span-5')+
+ panel('Báo cáo kết quả kinh doanh','Tổng hợp các ngày đã chốt','<div class="table-wrap"><table><thead><tr><th>KỲ</th><th>DOANH THU</th><th>CHI PHÍ</th><th>LỢI NHUẬN</th><th>CÔNG SUẤT</th></tr></thead><tbody>'+rows+'</tbody></table></div>','span-7')+
+ '</div>';
+}
+function renderResearch(){
+ const cards=research.map(r=>{
+  const done=state.researched.includes(r.id);
+  return '<div class="action-card"><div class="row-between"><strong>'+r.name+'</strong><span class="tag '+(done?'good':'warn')+'">'+(done?'Đã nghiên cứu':'Chưa mở khóa')+'</span></div><p>'+r.desc+'</p><p class="muted">Ngân sách: '+money(r.cost)+'</p><button class="button button-secondary" data-action="research" data-id="'+r.id+'" '+(done?'disabled':'')+'>'+(done?'Hoàn tất':'Đầu tư nghiên cứu')+'</button></div>'
+ }).join('');
+ const unlocks='<div class="stat-list">'+bar('Revenue Management',state.bonuses.yield*100,'gold')+bar('Service Excellence',state.bonuses.service,'blue')+bar('Smart Operations',state.bonuses.automation*100,'gold')+bar('Loyalty Program',state.bonuses.loyalty*100)+bar('Green Hotel',state.bonuses.green*100,'blue')+'</div>';
+ return '<div class="dashboard-grid">'+
+ metric('Cấp độ công ty',state.level,'Kinh nghiệm '+number(state.experience))+
+ metric('Hạng khách sạn',state.stars+' sao','Tăng theo cấp độ')+
+ metric('Nghiên cứu hoàn tất',state.researched.length+'/'+research.length,'Năng lực cạnh tranh')+
+ metric('Tài sản phòng',number(totalRooms()),'Tổng phòng đang sở hữu')+
+ panel('Danh mục nghiên cứu','Đầu tư để cải thiện hiệu quả dài hạn','<div class="action-grid">'+cards+'</div>','span-7')+
+ panel('Công nghệ đã sở hữu','Các chỉ số cộng thêm từ nghiên cứu',unlocks,'span-5')+
+ '</div>';
+}
+function render(){
+ const titles={overview:['BẢNG ĐIỀU KHIỂN','Tổng quan khách sạn','Theo dõi hoạt động và đưa ra quyết định điều hành.'],rooms:['QUẢN LÝ TÀI SẢN','Phòng & đặt chỗ','Kiểm soát sức chứa, giá phòng và trải nghiệm lưu trú.'],operations:['VẬN HÀNH','Vận hành khách sạn','Duy trì chất lượng dịch vụ và hiệu suất cơ sở.'],staff:['QUẢN TRỊ NHÂN SỰ','Nhân sự','Tuyển dụng, phân bổ và phát triển đội ngũ.'],market:['THƯƠNG MẠI','Thị trường','Điều chỉnh chiến lược giá và nhu cầu khách hàng.'],finance:['TÀI CHÍNH','Tài chính','Theo dõi dòng tiền, khoản vay và hiệu quả kinh doanh.'],research:['PHÁT TRIỂN','Nghiên cứu & mở rộng','Đầu tư năng lực dài hạn cho tập đoàn khách sạn.']};
+ const t=titles[currentTab];$('page-kicker').textContent=t[0];$('page-title').textContent=t[1];$('page-subtitle').textContent=t[2];
+ document.querySelectorAll('.nav-item').forEach(b=>b.classList.toggle('active',b.dataset.tab===currentTab));
+ const renderers={overview:renderOverview,rooms:renderRooms,operations:renderOperations,staff:renderStaff,market:renderMarket,finance:renderFinance,research:renderResearch};
+ $('tab-content').innerHTML=renderers[currentTab]();
+ $('top-cash').textContent=money(state.cash);$('top-day').textContent=String(state.day).padStart(2,'0');$('top-clock').textContent=fmtTime(state.minute);
+ $('hotel-name').textContent=state.hotelName;$('hotel-stars').textContent='★'.repeat(state.stars)+'☆'.repeat(5-state.stars);$('sidebar-reputation').textContent=Math.round(state.reputation)+'/100';$('sidebar-reputation-bar').style.width=state.reputation+'%';
+ $('simulation-status').textContent=state.paused?'Mô phỏng đang tạm dừng':'Mô phỏng đang chạy';
+ $('pause-btn').textContent=state.paused?'Tiếp tục':'Tạm dừng';$('speed-btn').textContent='Tốc độ: '+state.speed+'×';
+}
+function canSpend(amount){if(state.cash<amount){toast('Không đủ tiền mặt cho quyết định này.','error');return false}return true}
+function spend(amount,reason){state.cash-=amount;state.today.expenses+=amount;log(reason+' · −'+money(amount)+'.')}
+function openModal(title,body,buttons=''){
+ $('modal-content').innerHTML='<h2>'+title+'</h2>'+body+(buttons?'<div class="modal-actions">'+buttons+'</div>':'');
+ $('modal').showModal();
+}
+function showPriceModal(type){
+ const r=roomTypes[type];
+ openModal('Điều chỉnh giá '+r.label,'<p>Giá hiện tại: '+money(state.prices[type])+' mỗi đêm. Giá cao có thể giảm nhu cầu nếu vượt quá mức thị trường.</p><label class="field">Giá mới ($/đêm)<input id="price-input" type="number" min="20" max="1500" value="'+state.prices[type]+'"></label>','<button class="button button-secondary" value="cancel">Hủy</button><button class="button button-primary" id="confirm-price" type="button">Áp dụng</button>');
+ $('confirm-price').onclick=()=>{const value=Number($('price-input').value);if(!Number.isFinite(value)||value<20||value>1500){toast('Giá phải từ $20 đến $1,500.','error');return}state.prices[type]=Math.round(value);log('Cập nhật giá '+r.label+' thành '+money(value)+'/đêm.');$('modal').close();saveState(true);render();toast('Đã cập nhật giá phòng.','success')};
+}
+function buildRoom(type){
+ const r=roomTypes[type];if(!canSpend(r.build))return;
+ spend(r.build,'Xây thêm 1 phòng '+r.label);state.rooms[type]++;state.condition=clamp(state.condition-1,0,100);saveState(true);render();toast('Đã mở rộng thêm một phòng '+r.label+'.','success');
+}
+function hire(role){
+ const r=roles[role],cost=r.salary*1.5;if(!canSpend(cost))return;
+ spend(cost,'Tuyển nhân viên '+r.name);state.staff[role]++;state.morale=clamp(state.morale+1,0,100);saveState(true);render();
+}
+function fire(role){
+ if(state.staff[role]<=0)return;state.staff[role]--;state.morale=clamp(state.morale-2,0,100);log('Giảm một nhân sự bộ phận '+roles[role].name+'.');saveState(true);render();
+}
+function doAction(action,el){
+ const id=el.dataset.id,type=el.dataset.type,role=el.dataset.role;
+ switch(action){
+ case 'price':showPriceModal(type);return;
+ case 'pricing':showPriceModal('standard');return;
+ case 'build-room':buildRoom(type);return;
+ case 'hire':hire(role);return;
+ case 'fire':fire(role);return;
+ case 'facility':{
+  const f=facilities[id];if(state.facilities[id]||!canSpend(f.cost))return;
+  spend(f.cost,'Đầu tư '+f.name);state.facilities[id]=true;state.service=clamp(state.service+f.bonus*.35,0,100);saveState(true);render();break;
+ }
+ case 'maintenance':if(!canSpend(2500))return;spend(2500,'Bảo trì cơ sở');state.condition=clamp(state.condition+22,0,100);state.cleanliness=clamp(state.cleanliness+5,0,100);saveState(true);render();break;
+ case 'training':if(!canSpend(1800))return;spend(1800,'Đào tạo dịch vụ');state.service=clamp(state.service+8,0,100);state.morale=clamp(state.morale+2,0,100);saveState(true);render();break;
+ case 'stock':if(!canSpend(900))return;spend(900,'Nhập vật tư');state.stock=clamp(state.stock+35,0,100);saveState(true);render();break;
+ case 'energy':if(!canSpend(1200))return;spend(1200,'Tối ưu năng lượng');state.energy=clamp(state.energy+18,0,100);state.bonuses.green=Math.max(state.bonuses.green,.04);saveState(true);render();break;
+ case 'bonus':if(!canSpend(1500))return;spend(1500,'Thưởng hiệu suất');state.morale=clamp(state.morale+12,0,100);saveState(true);render();break;
+ case 'staff-training':if(!canSpend(2800))return;spend(2800,'Đào tạo toàn bộ nhân viên');state.service=clamp(state.service+5,0,100);state.morale=clamp(state.morale+8,0,100);saveState(true);render();break;
+ case 'marketing':runCampaign('local');break;
+ case 'campaign':runCampaign(el.dataset.kind);break;
+ case 'contract':offerContract();break;
+ case 'loan':state.cash+=10000;state.debt+=10000;log('Giải ngân khoản vay $10,000.');saveState(true);render();break;
+ case 'repay':if(!canSpend(5000)||state.debt<=0)return;const paid=Math.min(5000,state.debt);state.cash-=paid;state.debt-=paid;log('Trả nợ gốc '+money(paid)+'.');saveState(true);render();break;
+ case 'research':{
+  const item=research.find(x=>x.id===id);if(!item||state.researched.includes(id)||!canSpend(item.cost))return;
+  spend(item.cost,'Nghiên cứu '+item.name);state.researched.push(id);item.effect(state);saveState(true);render();toast('Đã hoàn tất '+item.name+'.','success');break;
+ }
+ }
+}
+function runCampaign(kind){
+ const cfg=kind==='premium'?{cost:5500,bonus:.32,days:4,name:'Chiến dịch cao cấp'}:{cost:2000,bonus:.15,days:3,name:'Quảng cáo địa phương'};
+ if(!canSpend(cfg.cost))return;spend(cfg.cost,cfg.name);state.marketing=cfg.bonus;state.marketingUntil=state.day+cfg.days;log(cfg.name+' đang hoạt động trong '+cfg.days+' ngày.');saveState(true);render();toast('Chiến dịch đã được triển khai.','success');
+}
+function offerContract(){
+ if(state.contract){toast('Bạn đang có một hợp đồng chưa kết thúc.','error');return}
+ const target=Math.max(5,Math.ceil(totalRooms()*.45));state.contract={target,progress:0,reward:target*210,due:state.day+3};
+ log('Nhận hợp đồng doanh nghiệp: phục vụ '+target+' lượt khách trong 3 ngày.');
+ toast('Hợp đồng mới: mục tiêu '+target+' lượt khách.','success');saveState(true);render();
+}
+function advanceSpeed(){
+ state.speed=state.speed===1?2:state.speed===2?4:1;render();
+}
+function togglePause(){
+ state.paused=!state.paused;render();saveState(true);
+}
+function tick(){
+ if(state.paused)return;
+ const loops=state.speed;
+ for(let i=0;i<loops;i++)simulateMinute();
+ const now=Date.now();if(now-lastRender>1200){lastRender=now;render();saveState(true)}
+}
+function bindEvents(){
+ document.querySelectorAll('.nav-item').forEach(b=>b.addEventListener('click',()=>{currentTab=b.dataset.tab;render()}));
+ $('tab-content').addEventListener('click',e=>{const b=e.target.closest('[data-action]');if(b&&!b.disabled)doAction(b.dataset.action,b)});
+ $('pause-btn').addEventListener('click',togglePause);
+ $('speed-btn').addEventListener('click',advanceSpeed);
+ $('close-day-btn').addEventListener('click',()=>{if(confirm('Chốt sổ ngày hiện tại và chuyển sang ngày tiếp theo?'))closeDay(false)});
+ $('save-btn').addEventListener('click',()=>saveState(false));
+ $('modal').addEventListener('click',e=>{if(e.target===$('modal'))$('modal').close()});
+ document.addEventListener('visibilitychange',()=>{if(document.hidden)saveState(true)});
+ window.addEventListener('beforeunload',()=>saveState(true));
+}
+function init(){
+ state=loadState();applyOffline();
+ if(!state.log.length)log('Chào mừng đến với Hotel Empire. Hãy quản lý khách sạn đầu tiên của bạn.');
+ bindEvents();render();saveState(true);
+ timer=setInterval(tick,1000);
+}
+init();
+})();
