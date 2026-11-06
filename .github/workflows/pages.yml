@@ -1,4 +1,4 @@
-name: Deploy Empire Builder 3D
+name: Deploy VOID SURVIVOR 3D to GitHub Pages
 on:
   push:
     branches: [main]
@@ -14,34 +14,29 @@ jobs:
   validate:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 20
-      - name: Validate app files
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Validate project files
         run: |
-          test -f index.html
-          test -f style.css
-          test -f app.js
-          test -f game.js
-          test -f manifest.webmanifest
-          test -f sw.js
-          node --check app.js
+          test -s index.html
+          test -s game.js
+          test -s style.css
+          test -s manifest.webmanifest
+          test -s sw.js
+          test -s assets/icon.svg
           node --check --input-type=module < game.js
-          python -m json.tool manifest.webmanifest >/dev/null
-          grep -q 'Empire Builder 3D' index.html
+          node -e "const fs=require('fs'); JSON.parse(fs.readFileSync('manifest.webmanifest','utf8')); console.log('Manifest OK')"
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: .
   deploy:
-    needs: validate
-    runs-on: ubuntu-latest
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
+    runs-on: ubuntu-latest
+    needs: validate
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/configure-pages@v5
-      - uses: actions/upload-pages-artifact@v3
-        with:
-          path: .
       - name: Deploy to GitHub Pages
         id: deployment
         uses: actions/deploy-pages@v4

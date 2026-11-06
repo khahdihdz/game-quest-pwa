@@ -1,43 +1,29 @@
-# Empire Builder 3D
+# VOID SURVIVOR 3D
 
-A small-scale modern city management simulation built as a browser game and installable Android PWA.
+Game sinh tồn hành động Roguelite chạy trên Web và Android PWA. Toàn bộ hình ảnh trong game được dựng procedural bằng hình học Three.js, vật liệu, ánh sáng và particle; không chứa ảnh, model, texture, âm thanh hay asset tải ngoài.
 
-## Game modes
-- **Campaign:** complete city-building objectives and collect rewards.
-- **Sandbox:** build freely and shape your city.
+## Chơi game
+- Mở GitHub Pages của repository.
+- PC: WASD hoặc phím mũi tên để di chuyển. Nhân vật tự động nhắm và bắn kẻ địch gần nhất.
+- Android: cài PWA từ trình duyệt, dùng joystick ảo.
+- Chọn Campaign (10 wave) hoặc Endless.
+- Tiêu diệt quái, thu XP, lên cấp và chọn 1 trong 3 nâng cấp ngẫu nhiên.
+- Boss xuất hiện sau 5 phút. Điểm cao và tín dụng được lưu cục bộ.
 
-## Gameplay
-- Interactive 3D city rendered with Three.js.
-- Orbit, rotate, zoom and inspect the city.
-- Place residential, commercial, industrial and public-service buildings on a 9×9 city grid.
-- Manage budget, population, happiness, employment, electricity, water and traffic.
-- Advance simulation days, earn tax/business income and pay city upkeep.
-- Complete missions and claim rewards.
-- Rename your city and save progress locally in your browser.
+## Công nghệ
+- Three.js 0.161 qua CDN (thư viện render, không phải asset game).
+- JavaScript ES modules, WebGL, CSS, Web App Manifest, Service Worker.
+- Không backend, không tài khoản, không gửi dữ liệu người chơi lên máy chủ.
 
-## Controls
-- Select a building in the right panel, then tap/click an empty tile.
-- Drag the city view to orbit; use the controls to zoom and rotate.
-- Switch to Inspect to view an existing building.
-- Use Pause, Speed and Next Day to control simulation time.
-
-## Run locally
-Serve this folder over localhost, for example:
-`python -m http.server 8080`, then open `http://localhost:8080`.
-
-Three.js is loaded from jsDelivr, so the initial 3D engine load requires an internet connection. The PWA caches the app shell; offline 3D rendering depends on the browser cache having retained the Three.js module.
+## Offline
+PWA cache mã nguồn và giao diện. Lần đầu cần Internet để tải thư viện Three.js từ CDN; sau khi thư viện đã được tải và cache bởi trình duyệt, khả năng chơi offline tùy chính sách cache của trình duyệt. Không tuyên bố offline tuyệt đối khi chưa có thư viện Three.js đóng gói nội bộ.
 
 ## GitHub Pages
-Enable **Settings → Pages → GitHub Actions**. Every push to `main` runs validation and deploys the site.
+Workflow `.github/workflows/pages.yml` tự kiểm tra cấu trúc và triển khai thư mục gốc lên GitHub Pages khi push vào `main`.
 
-Game URL: https://khahdihdz.github.io/game-quest-pwa/
-
-## Save data and privacy
-Game progress is stored locally in browser localStorage. No account or game server is required. Clearing browser site data also clears the local save.
-
-## Credits
-- Three.js for real-time 3D rendering.
-- Built for web browsers and Android PWA installation.
+## Controls
+- Desktop: WASD / Arrow keys, Escape để tạm dừng.
+- Mobile: joystick góc dưới trái, tự động tấn công.
 
 ## License
-MIT
+MIT.

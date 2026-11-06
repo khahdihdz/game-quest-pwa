@@ -1,15 +1,1 @@
-{
-  "id":"./",
-  "name":"Empire Builder 3D",
-  "short_name":"Empire Builder",
-  "description":"Build, manage and grow your modern 3D city empire.",
-  "lang":"vi",
-  "start_url":"./",
-  "scope":"./",
-  "display":"standalone",
-  "orientation":"any",
-  "background_color":"#0a1220",
-  "theme_color":"#101b2d",
-  "categories":["games","simulation","strategy"],
-  "icons":[{"src":"./assets/icon.svg","sizes":"any","type":"image/svg+xml","purpose":"any"}]
-}
+{"name":"VOID SURVIVOR 3D","short_name":"VOID SURVIVOR","description":"Sinh tồn trong đấu trường ngoài hành tinh.","start_url":"./","scope":"./","display":"standalone","orientation":"landscape","background_color":"#080d18","theme_color":"#080d18","icons":[{"src":"./assets/icon.svg","sizes":"any","type":"image/svg+xml","purpose":"any maskable"}]}

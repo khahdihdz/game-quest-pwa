@@ -1,22 +1,25 @@
 <!doctype html>
-<html lang="vi"><head>
-<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<meta name="theme-color" content="#101b2d"><meta name="description" content="Empire Builder 3D — xây dựng và quản lý đế chế thành phố hiện đại trong thế giới 3D.">
-<link rel="manifest" href="./manifest.webmanifest"><link rel="icon" href="./assets/icon.svg"><link rel="stylesheet" href="./style.css">
-<title>Empire Builder 3D</title>
-</head><body>
-<div class="app-shell">
-<header class="topbar"><a class="brand" href="./"><span class="brand-mark">EB</span><span><b>EMPIRE BUILDER</b><small>3D CITY SIMULATOR</small></span></a><div class="top-stats"><div><small>NGÂN SÁCH</small><b id="money">$ 12,500</b></div><div><small>DÂN SỐ</small><b id="population">120</b></div><div><small>HẠNH PHÚC</small><b id="happiness">82%</b></div><div><small>NGÀY</small><b id="day">01</b></div></div><div class="top-actions"><button id="languageBtn" class="icon-btn" title="Language">VI</button><button id="soundBtn" class="icon-btn" title="Âm thanh">♫</button><button id="saveBtn" class="icon-btn" title="Lưu">▣</button></div></header>
-<main class="workspace"><section class="city-view"><div id="viewport"><div class="loading" id="loading">Đang khởi tạo thành phố 3D…</div><div class="view-tools"><button id="zoomIn">＋</button><button id="zoomOut">－</button><button id="resetCamera">⌖</button><button id="toggleGrid">▦</button></div><div class="view-label"><span class="live-dot"></span> LIVE CITY VIEW <small id="cityName">NOVA CITY</small></div><div class="selection-hint" id="selectionHint">Chọn ô đất hoặc một công trình để xem thông tin</div></div><div class="bottom-controls"><button id="modeBuild" class="mode active">⌂ <span>XÂY DỰNG</span></button><button id="modeInspect" class="mode">⌕ <span>KIỂM TRA</span></button><button id="rotateLeft" class="mode">↶ <span>XOAY</span></button><button id="rotateRight" class="mode">↷ <span>XOAY</span></button></div></section>
-<aside class="sidebar"><div class="side-head"><div><small class="eyebrow">CITY MANAGEMENT</small><h1>Trung tâm điều hành</h1></div><span class="status-pill"><i></i> ĐANG HOẠT ĐỘNG</span></div>
-<div class="tabs"><button class="tab active" data-tab="build">Công trình</button><button class="tab" data-tab="city">Thành phố</button><button class="tab" data-tab="missions">Nhiệm vụ</button></div>
-<section id="tab-build" class="tab-content"><div class="section-title"><b>Danh mục xây dựng</b><small>Chọn công trình, sau đó chạm ô đất</small></div><div class="category-row"><button class="category active" data-category="all">Tất cả</button><button class="category" data-category="residential">Nhà ở</button><button class="category" data-category="business">Thương mại</button><button class="category" data-category="industry">Công nghiệp</button><button class="category" data-category="service">Dịch vụ</button></div><div id="buildingList" class="building-list"></div><div class="selected-card" id="selectedCard"><div class="selected-icon">⌖</div><div><b>Chưa chọn công trình</b><small>Chọn một công trình trong danh mục</small></div></div></section>
-<section id="tab-city" class="tab-content hidden"><div class="section-title"><b>Chỉ số đô thị</b><small>Thông tin vận hành theo thời gian</small></div><div class="metric-grid"><div><small>VIỆC LÀM</small><b id="jobs">75</b></div><div><small>ĐIỆN NĂNG</small><b id="power">78%</b></div><div><small>NƯỚC SẠCH</small><b id="water">86%</b></div><div><small>GIAO THÔNG</small><b id="traffic">92%</b></div></div><div class="city-details" id="cityDetails"></div><button class="wide-btn" id="renameCity">Đổi tên thành phố</button><button class="wide-btn danger" id="resetGame">Xóa tiến trình</button></section>
-<section id="tab-missions" class="tab-content hidden"><div class="section-title"><b>Chiến dịch: Thành phố mới</b><small>Hoàn thành mục tiêu để nhận thưởng</small></div><div id="missionList" class="mission-list"></div><div class="campaign-reward">🏆 <span><b>Thưởng chiến dịch</b><small>Nhận thêm ngân sách khi hoàn thành mục tiêu</small></span></div></section>
-<div class="sidebar-footer"><div class="mode-switch"><button id="campaignMode" class="active">CHIẾN DỊCH</button><button id="sandboxMode">SANDBOX</button></div><div class="time-row"><span><small>TỐC ĐỘ MÔ PHỎNG</small><b id="timeStatus">Tạm dừng</b></span><button id="pauseBtn">▶</button><button id="speedBtn">×1</button><button id="nextDayBtn">⏭</button></div><div class="save-status" id="saveStatus">● Tiến trình được lưu trên thiết bị</div></div>
-</aside></main>
-<div class="toast" id="toast"></div>
-</div>
-<script type="importmap">{"imports":{"three":"https://cdn.jsdelivr.net/npm/three@0.161.0/build/three.module.js"}}</script>
-<script type="module" src="./game.js"></script><script src="./app.js" defer></script>
+<html lang="vi">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+<meta name="theme-color" content="#080d18"><meta name="description" content="VOID SURVIVOR 3D - sống sót giữa đấu trường ngoài hành tinh.">
+<link rel="manifest" href="./manifest.webmanifest"><link rel="icon" href="./assets/icon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="./style.css"><title>VOID SURVIVOR 3D</title>
+</head>
+<body>
+<div id="game-shell">
+<header class="topbar"><div class="brand"><span class="brand-mark">V</span><div><b>VOID SURVIVOR</b><small>3D ROGUELITE</small></div></div><div class="top-stats"><span>◈ <b id="coins">0</b></span><span>BEST <b id="best">0</b></span><button id="pause-btn" class="icon-btn" aria-label="Tạm dừng">Ⅱ</button></div></header>
+<main id="stage"><div id="viewport"></div>
+<div class="hud"><div class="hud-left"><div class="stat-pill"><small>WAVE</small><b id="wave">01</b></div><div class="stat-pill"><small>TIME</small><b id="time">00:00</b></div><div class="stat-pill"><small>KILLS</small><b id="kills">0</b></div></div>
+<div class="health-wrap"><div class="health-label"><span>CORE INTEGRITY</span><b id="hp-label">100 / 100</b></div><div class="bar"><i id="hp-bar"></i></div><div class="xp-label"><span>LEVEL <b id="level">1</b></span><span id="xp-label">0 / 12 XP</span></div><div class="bar xp"><i id="xp-bar"></i></div></div>
+<div id="boss-wrap" class="boss-wrap hidden"><div><span>VOID TITAN</span><b id="boss-hp-label">100%</b></div><div class="bar boss"><i id="boss-bar"></i></div></div></div>
+<div id="toast" class="toast"></div>
+<div id="overlay" class="overlay"><div class="panel start-panel"><div class="eyebrow">SECTOR 07 // SIGNAL LOST</div><h1>VOID<br><em>SURVIVOR</em></h1><p>Sinh tồn. Tiến hóa. Phá vỡ vòng vây.</p><div class="feature-row"><span>✦ PROCEDURAL 3D</span><span>✦ NO ASSETS</span><span>✦ OFFLINE READY</span></div><div class="mode-select"><button class="mode active" data-mode="campaign"><b>CAMPAIGN</b><small>Vượt qua 10 đợt tấn công</small></button><button class="mode" data-mode="endless"><b>ENDLESS</b><small>Sống sót lâu nhất có thể</small></button></div><button id="start-btn" class="primary">BẮT ĐẦU SINH TỒN <span>→</span></button><div class="best-line">KỶ LỤC <b id="menu-best">0</b> <span>•</span> TÍN DỤNG <b id="menu-coins">0</b></div><div class="hint">WASD / phím mũi tên để di chuyển · Tự động ngắm và bắn</div></div></div>
+<div id="upgrade" class="overlay hidden"><div class="panel upgrade-panel"><div class="eyebrow">EVOLUTION PROTOCOL</div><h2>CHỌN NÂNG CẤP</h2><p>Vật chất năng lượng đã được đồng bộ.</p><div id="upgrade-options" class="upgrade-options"></div></div></div>
+<div id="pause" class="overlay hidden"><div class="panel"><div class="eyebrow">SYSTEM HALTED</div><h2>TẠM DỪNG</h2><p>Đấu trường đang chờ lệnh của bạn.</p><button id="resume-btn" class="primary">TIẾP TỤC</button><button id="quit-btn" class="secondary">VỀ MENU</button></div></div>
+<div id="result" class="overlay hidden"><div class="panel"><div class="eyebrow">RUN COMPLETE</div><h2 id="result-title">BẠN ĐÃ GỤC NGÃ</h2><div class="result-score"><small>FINAL SCORE</small><strong id="final-score">0</strong></div><div class="result-grid"><div><small>HẠ GỤC</small><b id="final-kills">0</b></div><div><small>SỐNG SÓT</small><b id="final-time">00:00</b></div><div><small>WAVE</small><b id="final-wave">1</b></div></div><button id="again-btn" class="primary">CHƠI LẠI ↻</button><button id="menu-btn" class="secondary">VỀ MENU</button></div></div>
+<div id="joystick" class="joystick"><div id="stick"></div></div><div class="mobile-tip">Di chuyển bằng joystick · Tự động tấn công</div>
+</main>
+<footer><span>VOID SURVIVOR 3D</span><span>BUILT FROM CODE · NO EXTERNAL ASSETS</span><span id="fps">READY</span></footer>
+</div><script type="importmap">{"imports":{"three":"https://cdn.jsdelivr.net/npm/three@0.161.0/build/three.module.js"}}</script><script type="module" src="./game.js"></script>
 </body></html>
