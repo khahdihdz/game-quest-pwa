@@ -1,11 +1,13 @@
 {
-  "name": "Đế Chế Khách Sạn: Thế Giới Ngầm",
-  "short_name": "Đế Chế Khách Sạn",
-  "description": "Trò chơi mô phỏng điều hành khách sạn trong thế giới trinh thám u tối với các lựa chọn cốt truyện hư cấu.",
+  "name": "HOTEL EMPIRE - Đế chế khách sạn",
+  "short_name": "HOTEL EMPIRE",
+  "description": "Game mô phỏng quản lý khách sạn, kinh doanh và xây dựng tập đoàn.",
+  "lang": "vi",
   "start_url": "./",
   "scope": "./",
   "display": "standalone",
   "orientation": "any",
-  "background_color": "#11100f",
-  "theme_color": "#151310"
+  "background_color": "#0d1714",
+  "theme_color": "#10251f",
+  "categories": ["games", "simulation", "business"]
 }
