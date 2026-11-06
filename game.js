@@ -179,6 +179,7 @@ function closeDay(automatic=false){
  const occ=occupancy()*100;
  for(const guest of [...state.guests]){guest.remaining--;if(guest.remaining<=0)checkout(guest)}
  state.guests=state.guests.filter(g=>g.status==='staying');
+ if(state.debt>0){const interest=state.debt*.0008;state.cash-=interest;state.today.expenses+=interest;log('Lãi vay trong ngày: '+money(interest)+'.')}
  const revenue=state.today.revenue,expenses=state.today.expenses;
  const profit=revenue-expenses;
  state.history.unshift({day:state.day,revenue,expenses,profit,occupancy:occ,guests:state.today.checkins});
@@ -187,7 +188,6 @@ function closeDay(automatic=false){
  state.experience+=Math.max(1,Math.floor(state.today.checkins/2)+Math.max(0,Math.floor(profit/1000)));
  if(state.experience>=state.level*120){state.experience-=state.level*120;state.level++;state.stars=clamp(2+Math.floor((state.level-1)/3),2,5);log('Thăng hạng khách sạn! Mở cấp '+state.level+'.')}
  if(state.contract&&state.contract.due<=state.day){if(state.contract.progress>=state.contract.target){state.cash+=state.contract.reward;state.reputation=clamp(state.reputation+3,0,100);log('Hoàn thành hợp đồng doanh nghiệp: +'+money(state.contract.reward),'success')}else{state.reputation=clamp(state.reputation-4,0,100);log('Không đạt chỉ tiêu hợp đồng.','warning')}state.contract=null}
- if(state.debt>0){const interest=state.debt*.0008;state.cash-=interest;log('Lãi vay trong ngày: '+money(interest)+'.')}
  state.day++;state.minute=480;state.today={revenue:0,expenses:0,checkins:0,checkouts:0,complaints:0,booked:0};
  state.cleanliness=clamp(state.cleanliness+state.staff.housekeeping*2.2,0,100);
  state.energy=clamp(state.energy+12,0,100);
