@@ -1,4 +1,4 @@
-(()=>{"use strict";
+const start=()=>{(()=>{"use strict";
 const $=id=>document.getElementById(id),KEY="empire-builder-3d-v1";
 const defs=window.City3D.defs;
 const fresh=()=>({money:12500,population:120,happiness:82,day:1,jobs:75,power:78,water:86,traffic:92,cityName:"NOVA CITY",mode:"campaign",paused:true,speed:1,buildings:[{type:"home",x:2,z:2},{type:"home",x:3,z:2},{type:"shop",x:5,z:2},{type:"park",x:2,z:5},{type:"office",x:5,z:5}],selected:"home",missionsClaimed:[],language:"vi"});
