@@ -1,34 +1,31 @@
-# Đế Chế Khách Sạn: Thế Giới Ngầm
+# HOTEL EMPIRE — Đế chế khách sạn
 
-Trò chơi mô phỏng quản lý khách sạn phong cách trinh thám u tối. Người chơi điều hành hoạt động kinh doanh hợp pháp, đồng thời đối mặt với những lời đề nghị và mối quan hệ bí ẩn hoàn toàn hư cấu.
+Game mô phỏng quản lý khách sạn theo phong cách kết hợp: điều hành kinh doanh, quản trị nhân sự, đầu tư cơ sở vật chất và lựa chọn trong các tình huống tương tác.
 
 ## Công nghệ
-- HTML5, CSS3 và JavaScript thuần.
-- Không sử dụng khung làm việc, thư viện giao diện, công cụ trò chơi, thư viện bên ngoài, mạng phân phối nội dung, dịch vụ API bên thứ ba hoặc tài nguyên hình ảnh, âm thanh, phông chữ bên ngoài.
-- Ứng dụng web có thể cài đặt trên Android và máy tính.
-- Lưu tiến trình trên thiết bị, có 3 ô lưu riêng, hỗ trợ xuất và nhập dữ liệu.
-- Tự động kiểm tra và phát hành lên GitHub Pages bằng quy trình GitHub Actions.
+- HTML5, CSS3 và Vanilla JavaScript.
+- Không framework, thư viện, CDN, API bên ngoài hoặc asset hình ảnh/âm thanh/font bên ngoài.
+- PWA cài đặt được trên Android và máy tính; Service Worker hỗ trợ ngoại tuyến.
+- Lưu tự động trên thiết bị bằng LocalStorage; hỗ trợ xuất/nhập bản sao lưu JSON.
+- GitHub Actions kiểm tra mã nguồn và triển khai GitHub Pages.
 
-## Nội dung trò chơi
-- Quản lý các loại phòng, giá thuê, khách lưu trú và công suất phòng.
-- Tuyển dụng lễ tân, nhân viên buồng phòng, an ninh và quản lý.
-- Điều hành vệ sinh, bảo trì, chất lượng dịch vụ, quảng bá và kiểm tra nội bộ.
-- Theo dõi tiền mặt, khoản vay, tiền lương, chi phí và báo cáo doanh thu.
-- Gặp gỡ các hội nhóm hư cấu; mỗi lựa chọn đều ảnh hưởng đến phần thưởng và áp lực điều tra.
-- Nhiều kết cục phụ thuộc vào tài chính, danh tiếng và mức độ rủi ro.
+## Gameplay
+- Quản lý công suất phòng, giá thuê, khách lưu trú và chất lượng dịch vụ.
+- Tuyển dụng, đào tạo và trả lương nhân viên.
+- Nâng cấp phòng, nhà hàng, spa, hồ bơi, phòng hội nghị và tiện ích.
+- Marketing, định giá, khuyến mãi, nghiên cứu thị trường và mở rộng thương hiệu.
+- Theo dõi doanh thu, chi phí vận hành, lợi nhuận, dòng tiền và danh tiếng.
+- Sự kiện ngẫu nhiên và lựa chọn tình huống có ảnh hưởng đến hoạt động kinh doanh.
+- Mô phỏng theo ngày, có tạm dừng và điều chỉnh tốc độ.
 
-## Cách chơi
-Mở trang trò chơi và bắt đầu tại Khách sạn Dạ Khúc. Sử dụng thanh điều hướng để quản lý từng bộ phận. Thời gian trong trò chơi tự trôi; người chơi có thể tạm dừng, thay đổi nhịp thời gian hoặc kết thúc ngày để chốt sổ.
+## Chơi game
+Mở trang GitHub Pages của repository hoặc chạy máy chủ tĩnh tại thư mục dự án. Tiến trình tự động lưu trên trình duyệt hiện tại.
 
-## Chạy trên máy cá nhân
-Mở tệp `index.html` bằng trình duyệt. Chức năng cài đặt ứng dụng và chơi ngoại tuyến cần chạy trên kết nối bảo mật hoặc máy chủ cục bộ.
-
-## Kiểm tra mã nguồn
-- Kiểm tra cú pháp JavaScript bằng lệnh `node --check game.js`.
-- Kiểm tra dữ liệu cấu hình ứng dụng bằng bộ phân tích JSON.
-
-## Lưu ý nội dung
-Tên hội nhóm, giao kèo và diễn biến điều tra chỉ là yếu tố hư cấu trong trò chơi; không mô phỏng hoặc hướng dẫn hành vi phạm pháp ngoài đời.
+## Kiểm tra
+```sh
+node --check game.js
+node -e "JSON.parse(require('fs').readFileSync('manifest.webmanifest','utf8'))"
+```
 
 ## Giấy phép
 MIT
