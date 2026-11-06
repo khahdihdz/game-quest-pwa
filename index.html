@@ -1,25 +1,71 @@
 <!doctype html>
 <html lang="vi">
 <head>
-<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
-<meta name="theme-color" content="#080d18"><meta name="description" content="VOID SURVIVOR 3D - sống sót giữa đấu trường ngoài hành tinh.">
-<link rel="manifest" href="./manifest.webmanifest"><link rel="icon" href="./assets/icon.svg" type="image/svg+xml">
-<link rel="stylesheet" href="./style.css"><title>VOID SURVIVOR 3D</title>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#101b2a">
+<meta name="description" content="Hotel Empire — mô phỏng điều hành khách sạn bằng văn bản.">
+<link rel="manifest" href="./manifest.webmanifest">
+<link rel="stylesheet" href="./style.css">
+<title>Hotel Empire — Hotel Management Simulator</title>
 </head>
 <body>
-<div id="game-shell">
-<header class="topbar"><div class="brand"><span class="brand-mark">V</span><div><b>VOID SURVIVOR</b><small>3D ROGUELITE</small></div></div><div class="top-stats"><span>◈ <b id="coins">0</b></span><span>BEST <b id="best">0</b></span><button id="pause-btn" class="icon-btn" aria-label="Tạm dừng">Ⅱ</button></div></header>
-<main id="stage"><div id="viewport"></div>
-<div class="hud"><div class="hud-left"><div class="stat-pill"><small>WAVE</small><b id="wave">01</b></div><div class="stat-pill"><small>TIME</small><b id="time">00:00</b></div><div class="stat-pill"><small>KILLS</small><b id="kills">0</b></div></div>
-<div class="health-wrap"><div class="health-label"><span>CORE INTEGRITY</span><b id="hp-label">100 / 100</b></div><div class="bar"><i id="hp-bar"></i></div><div class="xp-label"><span>LEVEL <b id="level">1</b></span><span id="xp-label">0 / 12 XP</span></div><div class="bar xp"><i id="xp-bar"></i></div></div>
-<div id="boss-wrap" class="boss-wrap hidden"><div><span>VOID TITAN</span><b id="boss-hp-label">100%</b></div><div class="bar boss"><i id="boss-bar"></i></div></div></div>
-<div id="toast" class="toast"></div>
-<div id="overlay" class="overlay"><div class="panel start-panel"><div class="eyebrow">SECTOR 07 // SIGNAL LOST</div><h1>VOID<br><em>SURVIVOR</em></h1><p>Sinh tồn. Tiến hóa. Phá vỡ vòng vây.</p><div class="feature-row"><span>✦ PROCEDURAL 3D</span><span>✦ NO ASSETS</span><span>✦ OFFLINE READY</span></div><div class="mode-select"><button class="mode active" data-mode="campaign"><b>CAMPAIGN</b><small>Vượt qua 10 đợt tấn công</small></button><button class="mode" data-mode="endless"><b>ENDLESS</b><small>Sống sót lâu nhất có thể</small></button></div><button id="start-btn" class="primary">BẮT ĐẦU SINH TỒN <span>→</span></button><div class="best-line">KỶ LỤC <b id="menu-best">0</b> <span>•</span> TÍN DỤNG <b id="menu-coins">0</b></div><div class="hint">WASD / phím mũi tên để di chuyển · Tự động ngắm và bắn</div></div></div>
-<div id="upgrade" class="overlay hidden"><div class="panel upgrade-panel"><div class="eyebrow">EVOLUTION PROTOCOL</div><h2>CHỌN NÂNG CẤP</h2><p>Vật chất năng lượng đã được đồng bộ.</p><div id="upgrade-options" class="upgrade-options"></div></div></div>
-<div id="pause" class="overlay hidden"><div class="panel"><div class="eyebrow">SYSTEM HALTED</div><h2>TẠM DỪNG</h2><p>Đấu trường đang chờ lệnh của bạn.</p><button id="resume-btn" class="primary">TIẾP TỤC</button><button id="quit-btn" class="secondary">VỀ MENU</button></div></div>
-<div id="result" class="overlay hidden"><div class="panel"><div class="eyebrow">RUN COMPLETE</div><h2 id="result-title">BẠN ĐÃ GỤC NGÃ</h2><div class="result-score"><small>FINAL SCORE</small><strong id="final-score">0</strong></div><div class="result-grid"><div><small>HẠ GỤC</small><b id="final-kills">0</b></div><div><small>SỐNG SÓT</small><b id="final-time">00:00</b></div><div><small>WAVE</small><b id="final-wave">1</b></div></div><button id="again-btn" class="primary">CHƠI LẠI ↻</button><button id="menu-btn" class="secondary">VỀ MENU</button></div></div>
-<div id="joystick" class="joystick"><div id="stick"></div></div><div class="mobile-tip">Di chuyển bằng joystick · Tự động tấn công</div>
-</main>
-<footer><span>VOID SURVIVOR 3D</span><span>BUILT FROM CODE · NO EXTERNAL ASSETS</span><span id="fps">READY</span></footer>
-</div><script type="importmap">{"imports":{"three":"https://cdn.jsdelivr.net/npm/three@0.161.0/build/three.module.js"}}</script><script type="module" src="./game.js"></script>
-</body></html>
+<div class="app-shell">
+  <header class="topbar">
+    <a class="brand" href="./" aria-label="Hotel Empire">
+      <span class="brand-mark">HE</span>
+      <span><strong>HOTEL EMPIRE</strong><small>MANAGEMENT SIMULATOR</small></span>
+    </a>
+    <div class="top-metrics">
+      <span><small>TIỀN MẶT</small><b id="top-cash">$120,000</b></span>
+      <span><small>NGÀY</small><b id="top-day">01</b></span>
+      <span class="clock"><small>GIỜ MÔ PHỎNG</small><b id="top-clock">08:00</b></span>
+      <button class="button button-quiet" id="pause-btn" type="button">Tạm dừng</button>
+    </div>
+  </header>
+
+  <main class="layout">
+    <aside class="sidebar">
+      <div class="property-card">
+        <div class="eyebrow">TÀI SẢN ĐẦU TIÊN</div>
+        <h2 id="hotel-name">The First Stay</h2>
+        <div class="property-rank"><span id="hotel-stars">★★☆☆☆</span><small id="hotel-location">Đà Nẵng · Việt Nam</small></div>
+        <div class="progress-caption"><span>Danh tiếng</span><b id="sidebar-reputation">65/100</b></div>
+        <div class="progress"><i id="sidebar-reputation-bar" style="width:65%"></i></div>
+      </div>
+      <nav class="nav-list" aria-label="Điều hướng">
+        <button class="nav-item active" data-tab="overview"><span>01</span>Tổng quan</button>
+        <button class="nav-item" data-tab="rooms"><span>02</span>Phòng & đặt chỗ</button>
+        <button class="nav-item" data-tab="operations"><span>03</span>Vận hành</button>
+        <button class="nav-item" data-tab="staff"><span>04</span>Nhân sự</button>
+        <button class="nav-item" data-tab="market"><span>05</span>Thị trường</button>
+        <button class="nav-item" data-tab="finance"><span>06</span>Tài chính</button>
+        <button class="nav-item" data-tab="research"><span>07</span>Phát triển</button>
+      </nav>
+      <div class="sidebar-foot">
+        <div class="status-line"><i class="status-dot"></i><span id="simulation-status">Mô phỏng đang chạy</span></div>
+        <small>LOCAL SAVE · OFFLINE PROGRESS</small>
+        <button id="save-btn" class="text-button" type="button">Lưu tiến trình ngay</button>
+      </div>
+    </aside>
+
+    <section class="main-content">
+      <div class="page-heading">
+        <div><div class="eyebrow" id="page-kicker">BẢNG ĐIỀU KHIỂN</div><h1 id="page-title">Tổng quan khách sạn</h1><p id="page-subtitle">Theo dõi hoạt động và đưa ra quyết định điều hành.</p></div>
+        <div class="heading-actions"><button class="button button-secondary" id="speed-btn" type="button">Tốc độ: 1×</button><button class="button button-primary" id="close-day-btn" type="button">Chốt ngày</button></div>
+      </div>
+      <div id="tab-content" aria-live="polite"></div>
+      <footer class="footer-note"><span>HOTEL EMPIRE / SIMULATION BUILD 1.0</span><span>Không sử dụng hình ảnh hoặc asset bên ngoài</span></footer>
+    </section>
+  </main>
+  <div id="toast-region" class="toast-region" aria-live="polite"></div>
+  <dialog id="modal" class="modal"><form method="dialog"><button class="modal-close" aria-label="Đóng">×</button><div id="modal-content"></div></form></dialog>
+</div>
+<script src="./game.js" defer></script>
+<script>
+if ('serviceWorker' in navigator && location.protocol.startsWith('http')) {
+  window.addEventListener('load', () => navigator.serviceWorker.register('./sw.js').catch(() => {}));
+}
+</script>
+</body>
+</html>
