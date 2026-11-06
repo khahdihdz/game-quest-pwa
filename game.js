@@ -117,7 +117,7 @@ function addGuest(){
  for(let i=0;i<available.length;i++){roll-=weights[i];if(roll<=0){chosen=available[i][0];break}}
  const rate=state.prices[chosen];
  const stay=Math.ceil(rand(1,4));
- const satisfaction=clamp(Math.round(state.service*.45+state.cleanliness*.35+roomTypes[chosen].comfort*.2+rand(-8,8)),20,100);
+ const satisfaction=clamp(Math.round((state.service+state.bonuses.service)*.45+state.cleanliness*.35+roomTypes[chosen].comfort*.2+rand(-8,8)),20,100);
  state.guests.push({id:state.nextGuestId++,name:pick(['Minh Anh','Hoàng Nam','Gia Hân','Quốc Bảo','Thanh Vy','Tuấn Kiệt','Mai Chi','Khánh Linh','Đức Anh','Bảo Ngọc']),type:chosen,rate,stay,remaining:stay,status:'staying',satisfaction,spent:0});
  state.today.checkins++;state.today.booked++;
  if(state.contract)state.contract.progress++;
@@ -154,7 +154,7 @@ function simulateMinute(){
  if(Math.random()<demand*.55)addGuest();
  updateGuestMinute();
  const occ=occupancy();
- const income=state.guests.filter(g=>g.status==='staying').reduce((a,g)=>a+g.rate/DAY_MINUTES,0);
+ const income=state.guests.filter(g=>g.status==='staying').reduce((a,g)=>a+g.rate*(1+state.bonuses.yield)/DAY_MINUTES,0);
  state.cash+=income;state.today.revenue+=income;state.lifetime.revenue+=income;
  const cost=operatingCostPerMinute();state.cash-=cost;state.today.expenses+=cost;
  if(state.minute%60===0){
@@ -204,15 +204,20 @@ function applyOffline(){
  const minutes=Math.floor(elapsed/1000*state.speed*5);
  if(minutes<=0)return;
  const capped=Math.min(minutes,DAY_MINUTES*3);
- let earned=0;
+ let earned=0,offlineRevenue=0,offlineCosts=0,dayRevenue=0,dayCosts=0;
  for(let i=0;i<capped;i++){
-  const occ=occupancy();const rev=state.guests.reduce((a,g)=>a+g.rate/DAY_MINUTES,0);
-  const cost=operatingCostPerMinute();earned+=rev-cost;
+  const occ=occupancy();const rev=state.guests.reduce((a,g)=>a+g.rate*(1+state.bonuses.yield)/DAY_MINUTES,0);
+  const cost=operatingCostPerMinute();earned+=rev-cost;offlineRevenue+=rev;offlineCosts+=cost;dayRevenue+=rev;dayCosts+=cost;
   state.minute++;
-  if(state.minute>=480+DAY_MINUTES){state.day++;state.minute=480;state.today={revenue:0,expenses:0,checkins:0,checkouts:0,complaints:0,booked:0};state.history.unshift({day:state.day-1,revenue:0,expenses:0,profit:0,occupancy:occ*100,guests:0})}
+  if(state.minute>=480+DAY_MINUTES){
+   for(const guest of [...state.guests]){guest.remaining--;if(guest.remaining<=0)checkout(guest)}
+   state.guests=state.guests.filter(g=>g.status==='staying');
+   state.history.unshift({day:state.day,revenue:dayRevenue,expenses:dayCosts,profit:dayRevenue-dayCosts,occupancy:occ*100,guests:0});state.history=state.history.slice(0,30);
+   state.lifetime.days++;dayRevenue=0;dayCosts=0;state.day++;state.minute=480;state.today={revenue:0,expenses:0,checkins:0,checkouts:0,complaints:0,booked:0};
+  }
   if(i%60===0){state.cleanliness=clamp(state.cleanliness-.5+state.staff.housekeeping*.12,0,100);state.condition=clamp(state.condition-.15+state.staff.maintenance*.04,0,100)}
  }
- state.cash+=earned;state.today.revenue+=Math.max(0,earned);state.lifetime.profit+=earned;state.lastSave=Date.now();
+ state.cash+=earned;state.today.revenue+=offlineRevenue;state.today.expenses+=offlineCosts;state.lifetime.revenue+=offlineRevenue;state.lifetime.profit+=earned;state.lastSave=Date.now();
  if(capped>0)state.log.unshift({day:state.day,minute:state.minute,text:'Mô phỏng offline '+number(capped)+' phút · '+(earned>=0?'+':'')+money(earned)+'.',type:'info'});
 }
 function fmtTime(minute){const m=minute%1440;return String(Math.floor(m/60)).padStart(2,'0')+':'+String(m%60).padStart(2,'0')}
@@ -416,7 +421,7 @@ function processBookings(){
  const now=(state.day-1)*DAY_MINUTES+(state.minute-480);
  for(const booking of state.bookings.filter(b=>b.status==='confirmed'&&b.arrivalAt<=now)){
   if(state.guests.filter(g=>g.type===booking.type).length>=state.rooms[booking.type]){booking.status='cancelled';log('Hủy đặt chỗ #'+booking.id+' do hết phòng.','warning');continue}
-  const satisfaction=clamp(Math.round(state.service*.45+state.cleanliness*.35+roomTypes[booking.type].comfort*.2+rand(-8,8)),20,100);
+  const satisfaction=clamp(Math.round((state.service+state.bonuses.service)*.45+state.cleanliness*.35+roomTypes[booking.type].comfort*.2+rand(-8,8)),20,100);
   state.guests.push({id:state.nextGuestId++,name:booking.name,type:booking.type,rate:booking.rate,stay:booking.stay,remaining:booking.stay,status:'staying',satisfaction,spent:0});
   booking.status='checked-in';state.today.checkins++;state.today.booked++;if(state.contract)state.contract.progress++;
   log('Check-in đặt trước #'+booking.id+' · '+booking.name+'.');
@@ -446,7 +451,7 @@ function bindEvents(){
  window.addEventListener('beforeunload',()=>saveState(true));
 }
 function init(){
- state=loadState();applyOffline();
+ state=loadState();state.paused=false;applyOffline();
  if(!state.log.length)log('Chào mừng đến với Hotel Empire. Hãy quản lý khách sạn đầu tiên của bạn.');
  bindEvents();render();saveState(true);
  timer=setInterval(tick,1000);
