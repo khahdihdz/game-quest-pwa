@@ -1,4 +1,4 @@
-name: Deploy Hotel Empire Underworld to GitHub Pages
+name: Deploy HOTEL EMPIRE to GitHub Pages
 on:
   push:
     branches: [main]
@@ -28,6 +28,8 @@ jobs:
           node -e "JSON.parse(require('fs').readFileSync('manifest.webmanifest','utf8')); console.log('Manifest OK')"
           ! grep -Eqi 'bootstrap|react|vue|angular|three\.js|phaser|unpkg\.com|jsdelivr\.net|cdnjs\.cloudflare\.com|fonts\.googleapis\.com' index.html game.js style.css
           ! grep -Eqi '<img|<audio|<video' index.html
+          grep -q 'HOTEL EMPIRE' index.html
+          grep -q 'localStorage' game.js
       - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@v3
         with:
