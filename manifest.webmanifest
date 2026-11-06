@@ -1,1 +1,11 @@
-{"name":"VOID SURVIVOR 3D","short_name":"VOID SURVIVOR","description":"Sinh tồn trong đấu trường ngoài hành tinh.","start_url":"./","scope":"./","display":"standalone","orientation":"landscape","background_color":"#080d18","theme_color":"#080d18","icons":[{"src":"./assets/icon.svg","sizes":"any","type":"image/svg+xml","purpose":"any maskable"}]}
+{
+  "name": "Hotel Empire — Hotel Management Simulator",
+  "short_name": "Hotel Empire",
+  "description": "Game mô phỏng quản lý khách sạn thuần văn bản.",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#0b1220",
+  "theme_color": "#101b2a"
+}
